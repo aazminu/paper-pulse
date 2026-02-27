@@ -1,12 +1,15 @@
+import os
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.database import supabase  # Import our new client
 
+load_dotenv()
 app = FastAPI(title="PaperPulse API")
 
-# Configure CORS for local development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"], 
+    allow_origins=[os.getenv("CORS_ORIGIN")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -16,6 +19,10 @@ app.add_middleware(
 def read_root():
     return {"status": "PaperPulse API is running smoothly!"}
 
-@app.get("/health")
-def health_check():
-    return {"status": "healthy", "version": "0.1.0"}
+@app.get("/health/db")
+def check_db():
+    try:
+        response = supabase.auth.get_session()
+        return {"status": "Database connection successful!"}
+    except Exception as e:
+        return {"status": "Database connection failed", "error": str(e)}
