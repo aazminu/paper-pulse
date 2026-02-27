@@ -2,7 +2,8 @@ import os
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.database import supabase  # Import our new client
+from app.database import supabase
+from app.routers import users
 
 load_dotenv()
 app = FastAPI(title="PaperPulse API")
@@ -14,6 +15,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(users.router)
 
 @app.get("/")
 def read_root():
