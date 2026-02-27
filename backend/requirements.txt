@@ -1,6 +1,7 @@
 annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.12.1
+APScheduler==3.11.2
 cachetools==6.2.6
 certifi==2026.2.25
 cffi==2.0.0
@@ -55,6 +56,7 @@ tenacity==9.1.4
 tqdm==4.67.3
 typing-inspection==0.4.2
 typing_extensions==4.15.0
+tzlocal==5.3.1
 urllib3==2.6.3
 uvicorn==0.41.0
 uvloop==0.22.1
