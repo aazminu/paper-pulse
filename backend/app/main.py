@@ -6,6 +6,7 @@ from app.database import supabase
 from app.routers import users
 from app.routers import pipeline
 from app.routers import feed
+from app.routers import ask
 
 load_dotenv()
 app = FastAPI(title="PaperPulse API")
@@ -21,6 +22,7 @@ app.add_middleware(
 app.include_router(users.router)
 app.include_router(pipeline.router)
 app.include_router(feed.router)
+app.include_router(ask.router)
 
 @app.get("/")
 def read_root():
