@@ -18,6 +18,10 @@ import {
 	Image as ImageIcon,
 	Film,
 	Music,
+	Eye,
+	Maximize2,
+	ChevronLeft,
+	ChevronRight,
 } from "lucide-react";
 import ReactMarkdown, { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -32,15 +36,23 @@ interface Source {
 
 interface AttachedFile {
 	file: File;
-	preview?: string; // data URL for image previews
+	preview?: string; // object URL for previews (images, PDFs, videos, audio)
 	type: "image" | "pdf" | "word" | "audio" | "video" | "text";
+	textContent?: string; // extracted text for word/text files
+}
+
+interface PreviewFile {
+	name: string;
+	type: string;
+	previewUrl?: string;
+	textContent?: string;
 }
 
 interface Message {
 	role: "user" | "ai";
 	content: string;
 	sources?: Source[];
-	attachments?: { name: string; type: string }[];
+	attachments?: PreviewFile[];
 }
 
 // Custom renderers to ensure proper spacing
@@ -160,6 +172,146 @@ function classifyFile(file: File): string {
 	return ACCEPTED_TYPES[file.type] || "text";
 }
 
+/* ── Preview Modal ─────────────────────────────────────────────────────── */
+function PreviewModal({
+	files,
+	initialIndex,
+	onClose,
+}: {
+	files: PreviewFile[];
+	initialIndex: number;
+	onClose: () => void;
+}) {
+	const [index, setIndex] = useState(initialIndex);
+	const file = files[index];
+
+	// Close on Escape, navigate with arrows
+	useEffect(() => {
+		const handleKey = (e: KeyboardEvent) => {
+			if (e.key === "Escape") onClose();
+			if (e.key === "ArrowLeft" && index > 0) setIndex((i) => i - 1);
+			if (e.key === "ArrowRight" && index < files.length - 1)
+				setIndex((i) => i + 1);
+		};
+		window.addEventListener("keydown", handleKey);
+		return () => window.removeEventListener("keydown", handleKey);
+	}, [index, files.length, onClose]);
+
+	const renderPreview = () => {
+		if (!file) return null;
+
+		if (file.type === "image" && file.previewUrl) {
+			return (
+				// eslint-disable-next-line @next/next/no-img-element
+				<img
+					src={file.previewUrl}
+					alt={file.name}
+					className="max-h-[80vh] max-w-full object-contain rounded-lg"
+				/>
+			);
+		}
+
+		if (file.type === "pdf" && file.previewUrl) {
+			return (
+				<iframe
+					src={file.previewUrl}
+					title={file.name}
+					className="w-full h-[80vh] rounded-lg border-0"
+				/>
+			);
+		}
+
+		if (file.type === "video" && file.previewUrl) {
+			return (
+				<video
+					src={file.previewUrl}
+					controls
+					className="max-h-[80vh] max-w-full rounded-lg"
+				/>
+			);
+		}
+
+		if (file.type === "audio" && file.previewUrl) {
+			return (
+				<div className="flex flex-col items-center gap-6 p-8">
+					<div className="h-32 w-32 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
+						<Music className="h-16 w-16 text-zinc-400" />
+					</div>
+					<p className="text-sm text-zinc-500 font-medium">{file.name}</p>
+					<audio src={file.previewUrl} controls className="w-full max-w-md" />
+				</div>
+			);
+		}
+
+		if ((file.type === "text" || file.type === "word") && file.textContent) {
+			return (
+				<div className="w-full max-w-3xl max-h-[80vh] overflow-auto bg-white dark:bg-zinc-900 rounded-lg p-6 border">
+					<pre className="whitespace-pre-wrap text-sm text-zinc-800 dark:text-zinc-200 font-mono">
+						{file.textContent}
+					</pre>
+				</div>
+			);
+		}
+
+		// Fallback: no preview available
+		return (
+			<div className="flex flex-col items-center gap-4 p-8 text-zinc-400">
+				<FileText className="h-20 w-20" />
+				<p className="text-sm font-medium">{file.name}</p>
+				<p className="text-xs">Preview not available for this file type</p>
+			</div>
+		);
+	};
+
+	return (
+		<div
+			className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+			onClick={(e) => {
+				if (e.target === e.currentTarget) onClose();
+			}}
+		>
+			{/* Header */}
+			<div className="absolute top-4 left-4 right-4 flex items-center justify-between z-10">
+				<p className="text-white text-sm font-medium truncate max-w-[60%]">
+					{file?.name}
+					{files.length > 1 && (
+						<span className="text-white/60 ml-2">
+							({index + 1} / {files.length})
+						</span>
+					)}
+				</p>
+				<button
+					onClick={onClose}
+					className="h-9 w-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition"
+				>
+					<X className="h-5 w-5" />
+				</button>
+			</div>
+
+			{/* Nav arrows */}
+			{files.length > 1 && index > 0 && (
+				<button
+					onClick={() => setIndex((i) => i - 1)}
+					className="absolute left-4 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition z-10"
+				>
+					<ChevronLeft className="h-6 w-6" />
+				</button>
+			)}
+			{files.length > 1 && index < files.length - 1 && (
+				<button
+					onClick={() => setIndex((i) => i + 1)}
+					className="absolute right-4 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition z-10"
+				>
+					<ChevronRight className="h-6 w-6" />
+				</button>
+			)}
+
+			{/* Content */}
+			<div className="flex items-center justify-center">{renderPreview()}</div>
+		</div>
+	);
+}
+
 export default function AskPage() {
 	const { user, isLoaded } = useUser();
 	const [query, setQuery] = useState("");
@@ -175,6 +327,10 @@ export default function AskPage() {
 	const [isDragging, setIsDragging] = useState(false);
 	const [isRecording, setIsRecording] = useState(false);
 	const [recordingTime, setRecordingTime] = useState(0);
+	const [previewModal, setPreviewModal] = useState<{
+		files: PreviewFile[];
+		index: number;
+	} | null>(null);
 
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -207,9 +363,29 @@ export default function AskPage() {
 			const type = classifyFile(file) as AttachedFile["type"];
 			const attached: AttachedFile = { file, type };
 
-			if (type === "image") {
+			// Generate preview URLs for all previewable types
+			if (
+				type === "image" ||
+				type === "pdf" ||
+				type === "video" ||
+				type === "audio"
+			) {
 				attached.preview = URL.createObjectURL(file);
 			}
+
+			// Read text content for text-based files
+			if (type === "text") {
+				file.text().then((text) => {
+					setAttachedFiles((prev) =>
+						prev.map((af) =>
+							af.file === file
+								? { ...af, textContent: text.substring(0, 50000) }
+								: af,
+						),
+					);
+				});
+			}
+
 			newFiles.push(attached);
 		}
 		setAttachedFiles((prev) => [...prev, ...newFiles]);
@@ -221,6 +397,10 @@ export default function AskPage() {
 			if (removed.preview) URL.revokeObjectURL(removed.preview);
 			return prev.filter((_, i) => i !== index);
 		});
+	};
+
+	const openPreview = (files: PreviewFile[], index: number) => {
+		setPreviewModal({ files, index });
 	};
 
 	// Voice recording
@@ -309,6 +489,8 @@ export default function AskPage() {
 				attachments: currentFiles.map((f) => ({
 					name: f.file.name,
 					type: f.type,
+					previewUrl: f.preview, // keep URL for in-chat preview
+					textContent: f.textContent,
 				})),
 			},
 		]);
@@ -364,10 +546,8 @@ export default function AskPage() {
 			]);
 		} finally {
 			setIsLoading(false);
-			// Clean up image previews
-			currentFiles.forEach((f) => {
-				if (f.preview) URL.revokeObjectURL(f.preview);
-			});
+			// Note: we intentionally do NOT revoke preview URLs here —
+			// they're stored in message attachments for in-chat preview.
 		}
 	};
 
@@ -443,19 +623,21 @@ export default function AskPage() {
 												{msg.content}
 											</p>
 										)}
-										{/* Show attached file badges */}
+										{/* Show attached file badges — clickable for preview */}
 										{msg.attachments && msg.attachments.length > 0 && (
 											<div className="flex flex-wrap gap-1.5 mt-2">
 												{msg.attachments.map((att, i) => (
-													<span
+													<button
 														key={i}
-														className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/20 dark:bg-black/20 text-xs"
+														onClick={() => openPreview(msg.attachments!, i)}
+														className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/20 dark:bg-black/20 text-xs hover:bg-white/30 dark:hover:bg-black/30 transition cursor-pointer"
 													>
 														{getFileIcon(att.type)}
 														<span className="max-w-30 truncate">
 															{att.name}
 														</span>
-													</span>
+														<Eye className="h-3 w-3 opacity-60" />
+													</button>
 												))}
 											</div>
 										)}
@@ -537,9 +719,20 @@ export default function AskPage() {
 							{attachedFiles.map((af, index) => (
 								<div
 									key={index}
-									className="relative group flex items-center gap-2 bg-white dark:bg-zinc-900 border rounded-lg px-3 py-2 text-xs shadow-sm"
+									className="relative group flex items-center gap-2 bg-white dark:bg-zinc-900 border rounded-lg px-3 py-2 text-xs shadow-sm cursor-pointer hover:border-blue-400 transition"
+									onClick={() =>
+										openPreview(
+											attachedFiles.map((f) => ({
+												name: f.file.name,
+												type: f.type,
+												previewUrl: f.preview,
+												textContent: f.textContent,
+											})),
+											index,
+										)
+									}
 								>
-									{af.preview ? (
+									{af.preview && af.type === "image" ? (
 										<Image
 											src={af.preview}
 											alt={af.file.name}
@@ -559,8 +752,13 @@ export default function AskPage() {
 											{(af.file.size / 1024).toFixed(0)}KB
 										</p>
 									</div>
+									{/* Preview icon */}
+									<Maximize2 className="h-3.5 w-3.5 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity" />
 									<button
-										onClick={() => removeFile(index)}
+										onClick={(e) => {
+											e.stopPropagation();
+											removeFile(index);
+										}}
 										className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
 									>
 										<X className="h-3 w-3" />
@@ -667,6 +865,15 @@ export default function AskPage() {
 					</p>
 				</div>
 			</main>
+
+			{/* Preview Modal */}
+			{previewModal && (
+				<PreviewModal
+					files={previewModal.files}
+					initialIndex={previewModal.index}
+					onClose={() => setPreviewModal(null)}
+				/>
+			)}
 		</div>
 	);
 }
