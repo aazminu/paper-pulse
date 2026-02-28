@@ -152,6 +152,34 @@ def classify_query_intent(question: str, has_history: bool) -> str:
         return "retrieval" if not has_history else "follow_up"
 
 
+def generate_chat_title(first_message: str) -> str:
+    """Generate a short chat title (3-6 words) from the first user message."""
+    try:
+        response = client.chat.completions.create(
+            model=SUMMARY_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Generate a concise chat title (3-6 words) for a conversation "
+                        "that starts with the user message below. "
+                        "Return ONLY the title — no quotes, no punctuation at the end, "
+                        "no explanation. Make it descriptive and specific."
+                    ),
+                },
+                {"role": "user", "content": first_message[:500]},
+            ],
+            reasoning_effort="low",
+            max_completion_tokens=30,
+        )
+        title = response.choices[0].message.content.strip().strip('"\'')
+        return title[:80] if title else "New Chat"
+    except Exception as e:
+        print(f"Error generating chat title: {e}")
+        # Fall back to truncating the first message
+        return first_message[:50].strip() or "New Chat"
+
+
 # ── Shared system prompt for Q&A ──────────────────────────────────────────
 _QA_SYSTEM_PROMPT = (
     "You are a brilliant, concise research assistant with deep access to the "

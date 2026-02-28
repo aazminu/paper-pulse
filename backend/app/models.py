@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import date, datetime
+from uuid import UUID
 
 # ----------------------------------
 # USER MODELS
@@ -60,3 +61,38 @@ class FeedItemResponse(BaseModel):
     created_at: datetime
     # We embed the actual paper details so the frontend can render the card easily
     paper: Optional[PaperResponse] = None
+
+
+# ----------------------------------
+# CHAT MODELS
+# ----------------------------------
+class ChatCreate(BaseModel):
+    user_id: str
+
+class ChatUpdate(BaseModel):
+    title: Optional[str] = None
+    starred: Optional[bool] = None
+
+class ChatResponse(BaseModel):
+    id: UUID
+    user_id: str
+    title: str
+    starred: bool
+    created_at: datetime
+    updated_at: datetime
+
+class ChatMessageCreate(BaseModel):
+    chat_id: UUID
+    role: str = Field(..., pattern="^(user|ai)$")
+    content: str = ""
+    sources: list = Field(default_factory=list)
+    attachments: list = Field(default_factory=list)
+
+class ChatMessageResponse(BaseModel):
+    id: UUID
+    chat_id: UUID
+    role: str
+    content: str
+    sources: list = Field(default_factory=list)
+    attachments: list = Field(default_factory=list)
+    created_at: datetime

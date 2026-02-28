@@ -10,6 +10,7 @@ from app.routers import users
 from app.routers import pipeline
 from app.routers import feed
 from app.routers import ask
+from app.routers import chats
 from app.services.pipeline_service import run_daily_pipeline
 
 load_dotenv()
@@ -44,6 +45,7 @@ app.include_router(users.router)
 app.include_router(pipeline.router)
 app.include_router(feed.router)
 app.include_router(ask.router)
+app.include_router(chats.router)
 
 @app.get("/")
 def read_root():
