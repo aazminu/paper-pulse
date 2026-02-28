@@ -31,6 +31,7 @@ import {
 	PanelLeft,
 	MoreHorizontal,
 	Pencil,
+	Search,
 } from "lucide-react";
 import ReactMarkdown, { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -73,6 +74,14 @@ interface Chat {
 	starred: boolean;
 	created_at: string;
 	updated_at: string;
+}
+
+interface SearchResult extends Chat {
+	match?: {
+		snippet?: string;
+		role?: string;
+		match_type: "title" | "message";
+	};
 }
 
 /* ── Markdown renderers ───────────────────────────────────────────────── */
@@ -385,7 +394,6 @@ function ChatItem({
 						: "hover:bg-zinc-50 dark:hover:bg-zinc-900/50 text-zinc-600 dark:text-zinc-400"
 				}`}
 			>
-				<MessageSquare className="h-4 w-4 shrink-0 opacity-50" />
 				<span className="flex-1 min-w-0">
 					{isEditing ? (
 						<input
@@ -434,7 +442,7 @@ function ChatItem({
 			{menuOpen && (
 				<div
 					ref={menuRef}
-					className="absolute right-0 top-full mt-1 z-20 bg-white dark:bg-zinc-900 border rounded-lg shadow-lg py-1 w-40"
+					className="absolute right-0 top-full -mt-3 z-20 bg-white dark:bg-zinc-900 border rounded-lg shadow-lg py-1 w-40"
 				>
 					<button
 						onClick={(e) => {
@@ -672,6 +680,12 @@ export default function AskPage() {
 	const [editingChatId, setEditingChatId] = useState<string | null>(null);
 	const [editTitle, setEditTitle] = useState("");
 
+	// Search
+	const [searchQuery, setSearchQuery] = useState("");
+	const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+	const [isSearching, setIsSearching] = useState(false);
+	const searchTimerRef = useRef<NodeJS.Timeout | null>(null);
+
 	// Messages
 	const [query, setQuery] = useState(() => {
 		if (typeof window === "undefined") return "";
@@ -704,6 +718,39 @@ export default function AskPage() {
 	const chatMenuRef = useRef<HTMLDivElement>(null);
 
 	const API = process.env.NEXT_PUBLIC_API_URL;
+
+	/* ── Debounced search ─────────────────────────────────────────────── */
+	useEffect(() => {
+		if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+		if (!searchQuery.trim() || searchQuery.trim().length < 2) {
+			setSearchResults([]);
+			setIsSearching(false);
+			return;
+		}
+		setIsSearching(true);
+		searchTimerRef.current = setTimeout(async () => {
+			if (!user) return;
+			try {
+				const res = await fetch(
+					`${API}/chats/search?user_id=${user.id}&q=${encodeURIComponent(searchQuery.trim())}`,
+				);
+				if (!res.ok) {
+					setSearchResults([]);
+					return;
+				}
+				const data: SearchResult[] = await res.json();
+				setSearchResults(data);
+			} catch {
+				setSearchResults([]);
+			} finally {
+				setIsSearching(false);
+			}
+		}, 350);
+		return () => {
+			if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [searchQuery, user]);
 
 	/* ── Persist sidebar state ────────────────────────────────────────── */
 	useEffect(() => {
@@ -907,8 +954,8 @@ export default function AskPage() {
 			}
 		};
 		if (chatMenuOpen) {
-			document.addEventListener("mousedown", handleClick);
-			return () => document.removeEventListener("mousedown", handleClick);
+			document.addEventListener("click", handleClick);
+			return () => document.removeEventListener("click", handleClick);
 		}
 	}, [chatMenuOpen]);
 
@@ -1254,7 +1301,7 @@ export default function AskPage() {
 					}`}
 				>
 					<div className="min-w-[18rem] flex flex-col h-full">
-						<div className="p-3">
+						<div className="p-3 space-y-2">
 							<button
 								onClick={createNewChat}
 								className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition text-sm font-medium"
@@ -1262,91 +1309,160 @@ export default function AskPage() {
 								<Plus className="h-4 w-4" />
 								New Chat
 							</button>
+							<div className="relative">
+								<Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
+								<input
+									value={searchQuery}
+									onChange={(e) => setSearchQuery(e.target.value)}
+									placeholder="Search chats..."
+									className="w-full pl-8 pr-8 py-2 rounded-lg bg-zinc-100 dark:bg-zinc-900 border-0 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+								/>
+								{searchQuery && (
+									<button
+										onClick={() => setSearchQuery("")}
+										className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 rounded-full bg-zinc-300 dark:bg-zinc-700 flex items-center justify-center hover:bg-zinc-400 dark:hover:bg-zinc-600 transition"
+									>
+										<X className="h-2.5 w-2.5" />
+									</button>
+								)}
+							</div>
 						</div>
 
 						<div className="flex-1 overflow-y-auto px-2 pb-3 space-y-1">
-							{starredChats.length > 0 && (
+							{/* Search results mode */}
+							{searchQuery.trim().length >= 2 ? (
 								<>
-									<p className="px-2 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-										Starred
+									<p className="px-2 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+										{isSearching
+											? "Searching..."
+											: `${searchResults.length} result${searchResults.length !== 1 ? "s" : ""}`}
 									</p>
-									{starredChats.map((chat) => (
-										<ChatItem
-											key={chat.id}
-											chat={chat}
-											isActive={chat.id === activeChatId}
-											isEditing={editingChatId === chat.id}
-											editTitle={editTitle}
-											menuOpen={chatMenuOpen === chat.id}
-											onSelect={() => {
-												setActiveChatId(chat.id);
-												setChatMenuOpen(null);
+									{searchResults.map((result) => (
+										<button
+											key={result.id}
+											onClick={() => {
+												setActiveChatId(result.id);
+												setSearchQuery("");
 											}}
-											onMenuToggle={() =>
-												setChatMenuOpen(
-													chatMenuOpen === chat.id ? null : chat.id,
-												)
-											}
-											onStar={() => toggleStar(chat.id)}
-											onDelete={() => deleteChat(chat.id)}
-											onStartEdit={() => {
-												setEditingChatId(chat.id);
-												setEditTitle(chat.title);
-												setChatMenuOpen(null);
-											}}
-											onEditChange={setEditTitle}
-											onEditConfirm={() => renameChat(chat.id, editTitle)}
-											onEditCancel={() => setEditingChatId(null)}
-											menuRef={chatMenuRef}
-										/>
+											className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition hover:bg-zinc-50 dark:hover:bg-zinc-900/50 ${
+												result.id === activeChatId
+													? "bg-zinc-100 dark:bg-zinc-900 font-medium"
+													: "text-zinc-600 dark:text-zinc-400"
+											}`}
+										>
+											<div className="flex items-center gap-2">
+												<MessageSquare className="h-4 w-4 shrink-0 opacity-50" />
+												<span className="truncate font-medium">
+													{result.title}
+												</span>
+												{result.starred && (
+													<Star className="h-3 w-3 text-yellow-500 fill-yellow-500 shrink-0" />
+												)}
+											</div>
+											{result.match?.match_type === "message" &&
+												result.match.snippet && (
+													<p className="mt-1 text-xs text-zinc-400 line-clamp-2 pl-6">
+														<span className="text-zinc-500">
+															{result.match.role === "ai" ? "AI: " : "You: "}
+														</span>
+														{result.match.snippet}
+													</p>
+												)}
+										</button>
 									))}
+									{!isSearching && searchResults.length === 0 && (
+										<div className="text-center py-8 text-zinc-400">
+											<Search className="h-6 w-6 mx-auto mb-2 opacity-40" />
+											<p className="text-xs">No matching chats found</p>
+										</div>
+									)}
 								</>
-							)}
-
-							{recentChats.length > 0 && (
+							) : (
 								<>
-									<p className="px-2 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-										Recent
-									</p>
-									{recentChats.map((chat) => (
-										<ChatItem
-											key={chat.id}
-											chat={chat}
-											isActive={chat.id === activeChatId}
-											isEditing={editingChatId === chat.id}
-											editTitle={editTitle}
-											menuOpen={chatMenuOpen === chat.id}
-											onSelect={() => {
-												setActiveChatId(chat.id);
-												setChatMenuOpen(null);
-											}}
-											onMenuToggle={() =>
-												setChatMenuOpen(
-													chatMenuOpen === chat.id ? null : chat.id,
-												)
-											}
-											onStar={() => toggleStar(chat.id)}
-											onDelete={() => deleteChat(chat.id)}
-											onStartEdit={() => {
-												setEditingChatId(chat.id);
-												setEditTitle(chat.title);
-												setChatMenuOpen(null);
-											}}
-											onEditChange={setEditTitle}
-											onEditConfirm={() => renameChat(chat.id, editTitle)}
-											onEditCancel={() => setEditingChatId(null)}
-											menuRef={chatMenuRef}
-										/>
-									))}
-								</>
-							)}
+									{starredChats.length > 0 && (
+										<>
+											<p className="px-2 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+												Starred
+											</p>
+											{starredChats.map((chat) => (
+												<ChatItem
+													key={chat.id}
+													chat={chat}
+													isActive={chat.id === activeChatId}
+													isEditing={editingChatId === chat.id}
+													editTitle={editTitle}
+													menuOpen={chatMenuOpen === chat.id}
+													onSelect={() => {
+														setActiveChatId(chat.id);
+														setChatMenuOpen(null);
+													}}
+													onMenuToggle={() =>
+														setChatMenuOpen(
+															chatMenuOpen === chat.id ? null : chat.id,
+														)
+													}
+													onStar={() => toggleStar(chat.id)}
+													onDelete={() => deleteChat(chat.id)}
+													onStartEdit={() => {
+														setEditingChatId(chat.id);
+														setEditTitle(chat.title);
+														setChatMenuOpen(null);
+													}}
+													onEditChange={setEditTitle}
+													onEditConfirm={() => renameChat(chat.id, editTitle)}
+													onEditCancel={() => setEditingChatId(null)}
+													menuRef={chatMenuRef}
+												/>
+											))}
+										</>
+									)}
 
-							{chats.length === 0 && (
-								<div className="text-center py-12 text-zinc-400">
-									<MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-40" />
-									<p className="text-sm">No chats yet</p>
-									<p className="text-xs mt-1">Start a conversation below</p>
-								</div>
+									{recentChats.length > 0 && (
+										<>
+											<p className="px-2 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+												Recent
+											</p>
+											{recentChats.map((chat) => (
+												<ChatItem
+													key={chat.id}
+													chat={chat}
+													isActive={chat.id === activeChatId}
+													isEditing={editingChatId === chat.id}
+													editTitle={editTitle}
+													menuOpen={chatMenuOpen === chat.id}
+													onSelect={() => {
+														setActiveChatId(chat.id);
+														setChatMenuOpen(null);
+													}}
+													onMenuToggle={() =>
+														setChatMenuOpen(
+															chatMenuOpen === chat.id ? null : chat.id,
+														)
+													}
+													onStar={() => toggleStar(chat.id)}
+													onDelete={() => deleteChat(chat.id)}
+													onStartEdit={() => {
+														setEditingChatId(chat.id);
+														setEditTitle(chat.title);
+														setChatMenuOpen(null);
+													}}
+													onEditChange={setEditTitle}
+													onEditConfirm={() => renameChat(chat.id, editTitle)}
+													onEditCancel={() => setEditingChatId(null)}
+													menuRef={chatMenuRef}
+												/>
+											))}
+										</>
+									)}
+
+									{chats.length === 0 && (
+										<div className="text-center py-12 text-zinc-400">
+											<MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-40" />
+											<p className="text-sm">No chats yet</p>
+											<p className="text-xs mt-1">Start a conversation below</p>
+										</div>
+									)}
+								</>
 							)}
 						</div>
 					</div>

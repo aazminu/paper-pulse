@@ -44,6 +44,73 @@ def list_chats(user_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── SEARCH chats / messages ───────────────────────────────────────────────
+@router.get("/search")
+def search_chats(user_id: str, q: str):
+    """Search across chat titles and message content for a user.
+    Returns matching chats with a snippet of the first matching message."""
+    if not q or len(q.strip()) < 2:
+        raise HTTPException(status_code=400, detail="Query must be at least 2 characters")
+    query_term = q.strip().lower()
+    try:
+        # 1. Get all user chats
+        chats_resp = (
+            supabase.table("chats")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("updated_at", desc=True)
+            .execute()
+        )
+        all_chats = chats_resp.data or []
+        chat_ids = [c["id"] for c in all_chats]
+        if not chat_ids:
+            return []
+
+        # 2. Search messages via ilike
+        messages_resp = (
+            supabase.table("chat_messages")
+            .select("chat_id, role, content, created_at")
+            .in_("chat_id", chat_ids)
+            .ilike("content", f"%{query_term}%")
+            .order("created_at", desc=True)
+            .limit(200)
+            .execute()
+        )
+        matched_messages = messages_resp.data or []
+
+        # Build set of chat_ids with message matches and first snippet per chat
+        msg_match_map: dict[str, dict] = {}
+        for msg in matched_messages:
+            cid = msg["chat_id"]
+            if cid not in msg_match_map:
+                # Extract a snippet around the match
+                content = msg["content"]
+                idx = content.lower().find(query_term)
+                start = max(0, idx - 40)
+                end = min(len(content), idx + len(query_term) + 40)
+                snippet = ("…" if start > 0 else "") + content[start:end] + ("…" if end < len(content) else "")
+                msg_match_map[cid] = {
+                    "snippet": snippet,
+                    "role": msg["role"],
+                    "match_type": "message",
+                }
+
+        # 3. Build results: title matches + message matches
+        results = []
+        for chat in all_chats:
+            title_match = query_term in chat["title"].lower()
+            msg_match = chat["id"] in msg_match_map
+            if title_match or msg_match:
+                entry = {**chat, "match": msg_match_map.get(chat["id"], {"match_type": "title"})}
+                results.append(entry)
+
+        return results
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ── CREATE chat ───────────────────────────────────────────────────────────
 @router.post("/")
 def create_chat(req: CreateChatRequest):
