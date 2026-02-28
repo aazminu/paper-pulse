@@ -98,3 +98,48 @@ def rerank_for_qa(
     Uses the user's question as the query for maximum relevance.
     """
     return rerank_papers(query=question, papers=papers, top_n=top_n)
+
+
+def rerank_chunks(
+    question: str,
+    chunks: List[dict],
+    top_n: int = 20,
+) -> List[dict]:
+    """
+    Rerank paper chunks against a Q&A question using Cohere rerank-v4.0-pro.
+
+    Args:
+        question:  The user's question.
+        chunks:    List of chunk dicts (must have 'chunk_text').
+        top_n:     Number of top chunks to return.
+
+    Returns:
+        List of chunk dicts reordered by Cohere relevance, with '_rerank_score'.
+    """
+    if not chunks:
+        return []
+
+    if not _client:
+        return chunks[:top_n]
+
+    documents = [c.get("chunk_text", "") for c in chunks]
+
+    try:
+        response = _client.rerank(
+            model=RERANK_MODEL,
+            query=question,
+            documents=documents,
+            top_n=min(top_n, len(chunks)),
+        )
+
+        reranked = []
+        for result in response.results:
+            chunk = chunks[result.index].copy()
+            chunk["_rerank_score"] = result.relevance_score
+            reranked.append(chunk)
+
+        return reranked
+
+    except Exception as e:
+        print(f"  [Rerank] Chunk reranking failed: {e}")
+        return chunks[:top_n]

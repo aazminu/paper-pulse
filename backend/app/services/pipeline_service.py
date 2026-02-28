@@ -32,6 +32,7 @@ from app.services.openai_service import (
 from app.services.rerank_service import rerank_papers
 from app.services.pdf_service import batch_extract_arxiv
 from app.services.query_optimizer import optimize_user_interests
+from app.services.chunking_service import batch_chunk_papers
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -278,7 +279,44 @@ def run_daily_pipeline():
                 processed_papers[pid] = paper_record
 
     # ------------------------------------------------------------------
-    # Step 5: Per-user Cohere rerank → top 25
+    # Step 5: Chunk + embed full-text papers for sub-document Q&A
+    # ------------------------------------------------------------------
+    papers_with_text = [
+        processed_papers[pid]
+        for pid, _ in papers_to_embed
+        if processed_papers.get(pid, {}).get("full_text")
+    ]
+    if papers_with_text:
+        print(f"\n--- Chunking {len(papers_with_text)} full-text papers ---")
+        all_chunks = batch_chunk_papers(papers_with_text)
+        print(f"  Generated {len(all_chunks)} chunks total")
+
+        # Batch embed all chunks
+        if all_chunks:
+            for batch_start in range(0, len(all_chunks), EMBEDDING_BATCH_SIZE):
+                batch = all_chunks[batch_start : batch_start + EMBEDDING_BATCH_SIZE]
+                chunk_texts = [c["chunk_text"] for c in batch]
+
+                print(f"  Embedding chunk batch {batch_start // EMBEDDING_BATCH_SIZE + 1} "
+                      f"({len(batch)} chunks)...")
+                chunk_vectors = get_embeddings_batch(chunk_texts)
+
+                for chunk, vector in zip(batch, chunk_vectors):
+                    chunk_record = {
+                        "paper_id": chunk["paper_id"],
+                        "chunk_index": chunk["chunk_index"],
+                        "chunk_text": chunk["chunk_text"],
+                        "chunk_vector": vector,
+                    }
+                    try:
+                        supabase.table("paper_chunks").insert(chunk_record).execute()
+                    except Exception as chunk_err:
+                        print(f"    Chunk insert error: {chunk_err}")
+
+            print(f"  Stored {len(all_chunks)} chunks in paper_chunks table")
+
+    # ------------------------------------------------------------------
+    # Step 6: Per-user Cohere rerank → top 25
     #   No RRF needed — APIs already returned relevance-sorted results
     #   via LLM-optimized queries. Cohere just picks the best 25.
     # ------------------------------------------------------------------
