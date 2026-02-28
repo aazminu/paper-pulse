@@ -32,6 +32,31 @@ def get_user_feed(user_id: str):
         print(f"Error fetching feed: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch feed.")
 
+@router.get("/{user_id}/saved", summary="Get a user's saved/bookmarked papers")
+def get_saved_papers(user_id: str):
+    try:
+        response = supabase.table("feed_items") \
+            .select("*, papers(*)") \
+            .eq("user_id", user_id) \
+            .eq("is_saved", True) \
+            .order("created_at", desc=True) \
+            .execute()
+
+        if not response.data:
+            return []
+
+        formatted = []
+        for item in response.data:
+            if "papers" in item:
+                item["paper"] = item.pop("papers")
+            formatted.append(item)
+
+        return formatted
+
+    except Exception as e:
+        print(f"Error fetching saved papers: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch saved papers.")
+
 @router.patch("/{feed_item_id}", summary="Save or unsave a paper")
 def update_feed_item(feed_item_id: str, update_data: FeedItemUpdate):
     try:

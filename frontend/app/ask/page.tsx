@@ -1284,6 +1284,12 @@ export default function AskPage() {
 						>
 							Daily Feed
 						</Link>
+						<Link
+							href="/saved"
+							className="hover:text-black dark:hover:text-white transition"
+						>
+							Saved
+						</Link>
 						<Link href="/ask" className="text-black dark:text-white">
 							Ask AI
 						</Link>
