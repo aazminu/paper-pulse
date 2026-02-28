@@ -2,6 +2,8 @@ from fastapi import APIRouter, HTTPException
 from app.models import UserCreate
 from app.database import supabase
 from app.services.openai_service import get_embedding
+from app.services.query_optimizer import optimize_user_interests
+import json
 
 # Create a router instance for user-related endpoints
 router = APIRouter(
@@ -21,8 +23,15 @@ def create_user(user: UserCreate):
             if embedding:
                 user_data["interest_vector"] = embedding
             else:
-                # If OpenAI fails, we still want to create the user, just without the vector for now
                 user_data["interest_vector"] = None
+
+            # Generate optimized search queries via GPT-5-mini
+            optimized = optimize_user_interests(
+                interest_text=user.interest_text,
+                domains=user.domains,
+            )
+            user_data["optimized_queries"] = json.dumps(optimized)
+            print(f"[Onboarding] Generated optimized queries: {optimized.get('search_queries', [])}")
         
         # Insert the user into Supabase
         response = supabase.table("users").insert(user_data).execute()

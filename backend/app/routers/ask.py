@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.database import supabase
 from app.services.openai_service import get_embedding, answer_question_with_context
+from app.services.rerank_service import rerank_for_qa
 
 router = APIRouter(
     prefix="/ask",
@@ -22,13 +23,12 @@ def ask_question(request: AskRequest):
         if not question_vector:
             raise HTTPException(status_code=500, detail="Failed to embed question.")
 
-        # Call our new Supabase RPC function to find the top 5 most relevant papers
-        # We pass the vector as a list, Supabase handles the conversion
+        # Retrieve top 50 papers by vector similarity from Supabase
         rpc_response = supabase.rpc(
             "match_user_papers",
             {
                 "query_embedding": question_vector,
-                "match_count": 5,
+                "match_count": 50,
                 "p_user_id": request.user_id
             }
         ).execute()
@@ -38,10 +38,17 @@ def ask_question(request: AskRequest):
         if not relevant_papers:
              return {"answer": "You don't have any papers in your corpus yet! Wait for the daily pipeline to run.", "sources": []}
 
-        print(f"Found {len(relevant_papers)} relevant papers. Generating answer...")
+        # rerank top 50 to top 25 most relevant to the question
+        reranked_papers = rerank_for_qa(
+            question=request.question,
+            papers=relevant_papers,
+            top_n=25,
+        )
 
-        # Pass the question and the fetched papers to GPT-4o
-        final_response = answer_question_with_context(request.question, relevant_papers)
+        print(f"Retrieved {len(relevant_papers)} papers, reranked to {len(reranked_papers)}. Generating answer with GPT-5.2...")
+
+        # Pass the reranked papers to GPT-5.2
+        final_response = answer_question_with_context(request.question, reranked_papers)
         
         return final_response
 

@@ -14,7 +14,7 @@ def get_user_feed(user_id: str):
             .select("*, papers(*)") \
             .eq("user_id", user_id) \
             .order("relevance_score", desc=True) \
-            .limit(10) \
+            .limit(25) \
             .execute()
         
         if not response.data:

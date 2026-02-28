@@ -33,7 +33,38 @@ interface FeedItem {
 		abstract: string;
 		summary: string;
 		url: string;
+		source?: string;
 	};
+}
+
+/** Map source IDs to human-readable labels */
+function getSourceLabel(source?: string): string {
+	switch (source) {
+		case "semantic_scholar":
+			return "Semantic Scholar";
+		case "openalex":
+			return "OpenAlex";
+		case "pubmed":
+			return "PubMed";
+		case "arxiv":
+		default:
+			return "ArXiv";
+	}
+}
+
+/** Map source IDs to link text */
+function getSourceLinkText(source?: string): string {
+	switch (source) {
+		case "semantic_scholar":
+			return "View Paper";
+		case "openalex":
+			return "View Paper";
+		case "pubmed":
+			return "View on PubMed";
+		case "arxiv":
+		default:
+			return "Read on ArXiv";
+	}
 }
 
 export default function FeedPage() {
@@ -118,7 +149,8 @@ export default function FeedPage() {
 						Your Daily Digest
 					</h2>
 					<p className="text-zinc-500 mt-2">
-						AI-curated research based on your specific interests.
+						AI-curated from ArXiv, Semantic Scholar, PubMed &amp; OpenAlex —
+						ranked by your research interests.
 					</p>
 				</div>
 
@@ -172,14 +204,22 @@ export default function FeedPage() {
 												{item.paper.published_date}
 											</p>
 										</div>
-										<Badge
-											variant={
-												item.relevance_score > 0.8 ? "default" : "secondary"
-											}
-											className="whitespace-nowrap"
-										>
-											{(item.relevance_score * 100).toFixed(0)}% Match
-										</Badge>
+										<div className="flex flex-col gap-1 items-end shrink-0">
+											<Badge
+												variant={
+													item.relevance_score > 0.8 ? "default" : "secondary"
+												}
+												className="whitespace-nowrap"
+											>
+												{(item.relevance_score * 100).toFixed(0)}% Match
+											</Badge>
+											<Badge
+												variant="outline"
+												className="whitespace-nowrap text-xs"
+											>
+												{getSourceLabel(item.paper.source)}
+											</Badge>
+										</div>
 									</div>
 								</CardHeader>
 								<CardContent className="space-y-4">
@@ -216,7 +256,8 @@ export default function FeedPage() {
 											target="_blank"
 											rel="noopener noreferrer"
 										>
-											Read on ArXiv <ExternalLink className="h-4 w-4" />
+											{getSourceLinkText(item.paper.source)}{" "}
+											<ExternalLink className="h-4 w-4" />
 										</a>
 									</Button>
 								</CardFooter>

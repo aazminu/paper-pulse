@@ -28,6 +28,9 @@ class PaperCreate(BaseModel):
     published_date: date
     abstract: str
     url: str
+    source: str = Field(default="arxiv", description="Paper source: arxiv, semantic_scholar, pubmed, or openalex")
+    doi: Optional[str] = Field(default=None, description="DOI identifier if available")
+    full_text: Optional[str] = Field(default=None, description="Full paper text extracted from PDF (ArXiv papers)")
 
 class PaperResponse(BaseModel):
     arxiv_id: str
@@ -37,6 +40,9 @@ class PaperResponse(BaseModel):
     abstract: str
     summary: Optional[str] = None
     url: str
+    source: str = "arxiv"
+    doi: Optional[str] = None
+    full_text: Optional[str] = None
     created_at: datetime
 
 # ----------------------------------
