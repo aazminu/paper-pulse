@@ -6,6 +6,10 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Send, Bot, User as UserIcon, BookOpen } from "lucide-react";
+import ReactMarkdown, { Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 
 interface Source {
 	arxiv_id: string;
@@ -18,6 +22,75 @@ interface Message {
 	content: string;
 	sources?: Source[];
 }
+
+// Custom renderers to ensure proper spacing
+const markdownComponents: Components = {
+	p: ({ children }) => (
+		<p className="mb-3 leading-relaxed last:mb-0">{children}</p>
+	),
+	h2: ({ children }) => (
+		<h2 className="text-lg font-bold mt-6 mb-3 pb-1 border-b border-zinc-200 dark:border-zinc-700">
+			{children}
+		</h2>
+	),
+	h3: ({ children }) => (
+		<h3 className="text-base font-semibold mt-5 mb-2 text-zinc-900 dark:text-zinc-100">
+			{children}
+		</h3>
+	),
+	h4: ({ children }) => (
+		<h4 className="text-sm font-semibold mt-4 mb-1.5 text-zinc-800 dark:text-zinc-200">
+			{children}
+		</h4>
+	),
+	ul: ({ children }) => (
+		<ul className="my-3 pl-5 space-y-2 list-disc">{children}</ul>
+	),
+	ol: ({ children }) => (
+		<ol className="my-3 pl-5 space-y-2 list-decimal">{children}</ol>
+	),
+	li: ({ children }) => (
+		<li className="leading-relaxed pl-1 [&>p]:inline [&>p]:mb-0">{children}</li>
+	),
+	blockquote: ({ children }) => (
+		<blockquote className="my-4 pl-4 border-l-2 border-blue-400 dark:border-blue-600 text-zinc-600 dark:text-zinc-400 italic">
+			{children}
+		</blockquote>
+	),
+	hr: () => <hr className="my-5 border-zinc-200 dark:border-zinc-700" />,
+	pre: ({ children }) => (
+		<pre className="my-4 p-4 bg-zinc-100 dark:bg-zinc-800 rounded-lg overflow-x-auto text-sm">
+			{children}
+		</pre>
+	),
+	code: ({ children, className }) => {
+		const isBlock = className?.includes("language-");
+		if (isBlock) return <code className={className}>{children}</code>;
+		return (
+			<code className="px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 text-blue-600 dark:text-blue-400 rounded text-sm">
+				{children}
+			</code>
+		);
+	},
+	strong: ({ children }) => (
+		<strong className="font-semibold text-zinc-900 dark:text-zinc-100">
+			{children}
+		</strong>
+	),
+	em: ({ children }) => (
+		<em className="italic text-zinc-700 dark:text-zinc-300">{children}</em>
+	),
+	a: ({ href, children }) => (
+		<a
+			href={href}
+			target="_blank"
+			rel="noopener noreferrer"
+			className="text-blue-600 dark:text-blue-400 hover:underline"
+		>
+			{children}
+		</a>
+	),
+};
 
 export default function AskPage() {
 	const { user, isLoaded } = useUser();
@@ -123,9 +196,21 @@ export default function AskPage() {
 										: "bg-white dark:bg-zinc-900 border shadow-sm rounded-tl-sm text-zinc-800 dark:text-zinc-200"
 								}`}
 							>
-								<p className="whitespace-pre-wrap leading-relaxed text-sm sm:text-base">
-									{msg.content}
-								</p>
+								{msg.role === "user" ? (
+									<p className="whitespace-pre-wrap leading-relaxed text-sm sm:text-base">
+										{msg.content}
+									</p>
+								) : (
+									<div className="text-sm sm:text-base text-zinc-800 dark:text-zinc-200">
+										<ReactMarkdown
+											remarkPlugins={[remarkGfm, remarkMath]}
+											rehypePlugins={[rehypeKatex]}
+											components={markdownComponents}
+										>
+											{msg.content}
+										</ReactMarkdown>
+									</div>
+								)}
 
 								{/* Sources List */}
 								{msg.sources && msg.sources.length > 0 && (
