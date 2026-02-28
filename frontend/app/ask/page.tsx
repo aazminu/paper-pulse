@@ -379,7 +379,7 @@ function ChatItem({
 		<div className="relative group">
 			<button
 				onClick={onSelect}
-				className={`w-full text-left px-3 py-2.5 rounded-lg text-sm flex items-center gap-2 transition ${
+				className={`w-full text-left px-3 py-2.5 pr-9 rounded-lg text-sm flex items-center gap-2 transition ${
 					isActive
 						? "bg-zinc-100 dark:bg-zinc-900 font-medium"
 						: "hover:bg-zinc-50 dark:hover:bg-zinc-900/50 text-zinc-600 dark:text-zinc-400"
@@ -1140,7 +1140,7 @@ export default function AskPage() {
 			// Save AI response to DB
 			await saveMessage(chatId, "ai", data.answer, data.sources || []);
 
-			// Bump chat to top
+			// Bump chat to top & generate title if still "New Chat"
 			setChats((prev) => {
 				const updated = prev.map((c) =>
 					c.id === chatId ? { ...c, updated_at: new Date().toISOString() } : c,
@@ -1151,6 +1151,25 @@ export default function AskPage() {
 						new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
 					);
 				});
+
+				// If title is still "New Chat", kick off a background rename
+				const current = updated.find((c) => c.id === chatId);
+				if (current && current.title === "New Chat" && userMessage) {
+					// Use truncated user message as immediate fallback, then try AI
+					const fallback =
+						userMessage.length > 40
+							? userMessage.slice(0, 40) + "…"
+							: userMessage;
+					fetch(`${API}/chats/${chatId}`, {
+						method: "PATCH",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ title: fallback }),
+					}).catch(() => {});
+					return updated.map((c) =>
+						c.id === chatId ? { ...c, title: fallback } : c,
+					);
+				}
+
 				return updated;
 			});
 		} catch (error) {
@@ -1229,8 +1248,12 @@ export default function AskPage() {
 			{/* Body: sidebar + chat */}
 			<div className="flex grow overflow-hidden">
 				{/* ── Sidebar ──────────────────────────────────────────────── */}
-				{sidebarOpen && (
-					<aside className="w-72 shrink-0 border-r bg-white dark:bg-zinc-950 flex flex-col overflow-hidden">
+				<aside
+					className={`shrink-0 border-r bg-white dark:bg-zinc-950 flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${
+						sidebarOpen ? "w-72 opacity-100" : "w-0 opacity-0 border-r-0"
+					}`}
+				>
+					<div className="min-w-[18rem] flex flex-col h-full">
 						<div className="p-3">
 							<button
 								onClick={createNewChat}
@@ -1326,8 +1349,8 @@ export default function AskPage() {
 								</div>
 							)}
 						</div>
-					</aside>
-				)}
+					</div>
+				</aside>
 
 				{/* ── Chat area ────────────────────────────────────────────── */}
 				<main className="flex-1 flex flex-col overflow-hidden">

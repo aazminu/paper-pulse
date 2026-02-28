@@ -153,19 +153,41 @@ def add_message(chat_id: UUID, req: SaveMessageRequest):
             .execute()
         )
 
-        # Auto-generate title after first user message
-        if req.role == "user" and req.content:
+        # Auto-generate title if still "New Chat"
+        generated_title = None
+        if req.content:
             chat_resp = (
                 supabase.table("chats")
                 .select("title")
                 .eq("id", str(chat_id))
                 .execute()
             )
-            if chat_resp.data and chat_resp.data[0]["title"] == "New Chat":
-                title = generate_chat_title(req.content)
-                supabase.table("chats").update({"title": title}).eq("id", str(chat_id)).execute()
-                return {"message": msg_resp.data[0], "generated_title": title}
+            if chat_resp.data and chat_resp.data[0]["title"] in ("New Chat", ""):
+                # For user messages use the message itself, for AI messages
+                # fetch the first user message in the conversation
+                title_source = req.content
+                if req.role == "ai":
+                    first_msg = (
+                        supabase.table("chat_messages")
+                        .select("content")
+                        .eq("chat_id", str(chat_id))
+                        .eq("role", "user")
+                        .order("created_at", desc=False)
+                        .limit(1)
+                        .execute()
+                    )
+                    if first_msg.data and first_msg.data[0]["content"]:
+                        title_source = first_msg.data[0]["content"]
+                try:
+                    title = generate_chat_title(title_source)
+                    supabase.table("chats").update({"title": title}).eq("id", str(chat_id)).execute()
+                    generated_title = title
+                except Exception as title_err:
+                    print(f"Title generation failed: {title_err}")
 
-        return {"message": msg_resp.data[0]}
+        result = {"message": msg_resp.data[0]}
+        if generated_title:
+            result["generated_title"] = generated_title
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
