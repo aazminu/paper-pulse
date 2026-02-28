@@ -1,7 +1,7 @@
 """
 ArXiv Full-Text PDF Extraction Service.
 
-With GPT-5.2's 400K token context window, we no longer need to rely on just
+With gpt-4.1's 1M token context window, we no longer need to rely on just
 paper abstracts.  This service downloads ArXiv PDFs and extracts the full
 text so the LLM can cross-reference entire papers natively.
 

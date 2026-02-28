@@ -25,7 +25,7 @@ def create_user(user: UserCreate):
             else:
                 user_data["interest_vector"] = None
 
-            # Generate optimized search queries via GPT-5-mini
+            # Generate optimized search queries via o4-mini
             optimized = optimize_user_interests(
                 interest_text=user.interest_text,
                 domains=user.domains,

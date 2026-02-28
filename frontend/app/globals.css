@@ -125,3 +125,8 @@
 		@apply bg-background text-foreground;
 	}
 }
+
+/* Prevent KaTeX parse errors from rendering as red text */
+.katex-error {
+	color: inherit !important;
+}

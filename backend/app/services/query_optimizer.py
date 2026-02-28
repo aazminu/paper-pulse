@@ -2,7 +2,7 @@
 LLM Query Optimizer — Transforms raw user interest text into
 precision search queries optimized for each academic API.
 
-Uses GPT-5-mini as a classifier/optimizer to:
+Uses o4-mini as a classifier/optimizer to:
   1. Extract the exact technical keywords that would appear in paper titles
   2. Generate multiple focused search queries covering different facets
   3. Identify the most specific ArXiv sub-categories (e.g., cs.LG, cs.CL)
@@ -14,7 +14,7 @@ interests), NOT on every pipeline run.
 
 import json
 from typing import Optional
-from app.services.openai_service import client
+from app.services.openai_service import client, SUMMARY_MODEL
 
 
 def optimize_user_interests(
@@ -70,7 +70,7 @@ Rules:
 
     try:
         response = client.chat.completions.create(
-            model="gpt-5-mini",
+            model=SUMMARY_MODEL,
             messages=[
                 {
                     "role": "system",
@@ -78,7 +78,7 @@ Rules:
                 },
                 {"role": "user", "content": prompt},
             ],
-            temperature=1,
+            reasoning_effort="low",
             max_completion_tokens=500,
         )
 

@@ -1,11 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useUser, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Send, Bot, User as UserIcon, BookOpen } from "lucide-react";
+import {
+	Send,
+	Bot,
+	User as UserIcon,
+	BookOpen,
+	Paperclip,
+	Mic,
+	Square,
+	X,
+	FileText,
+	Image as ImageIcon,
+	Film,
+	Music,
+} from "lucide-react";
 import ReactMarkdown, { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -17,10 +30,17 @@ interface Source {
 	abstract: string;
 }
 
+interface AttachedFile {
+	file: File;
+	preview?: string; // data URL for image previews
+	type: "image" | "pdf" | "word" | "audio" | "video" | "text";
+}
+
 interface Message {
 	role: "user" | "ai";
 	content: string;
 	sources?: Source[];
+	attachments?: { name: string; type: string }[];
 }
 
 // Custom renderers to ensure proper spacing
@@ -92,6 +112,54 @@ const markdownComponents: Components = {
 	),
 };
 
+const ACCEPTED_TYPES: Record<string, string> = {
+	"image/png": "image",
+	"image/jpeg": "image",
+	"image/gif": "image",
+	"image/webp": "image",
+	"application/pdf": "pdf",
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+		"word",
+	"application/msword": "word",
+	"audio/mpeg": "audio",
+	"audio/mp3": "audio",
+	"audio/wav": "audio",
+	"audio/x-wav": "audio",
+	"audio/m4a": "audio",
+	"audio/mp4": "audio",
+	"audio/webm": "audio",
+	"audio/ogg": "audio",
+	"video/mp4": "video",
+	"video/quicktime": "video",
+	"video/webm": "video",
+	"video/x-matroska": "video",
+	"text/plain": "text",
+	"text/csv": "text",
+	"text/markdown": "text",
+	"application/json": "text",
+};
+
+function getFileIcon(type: string) {
+	switch (type) {
+		case "image":
+			return <ImageIcon className="h-4 w-4" />;
+		case "pdf":
+		case "word":
+		case "text":
+			return <FileText className="h-4 w-4" />;
+		case "audio":
+			return <Music className="h-4 w-4" />;
+		case "video":
+			return <Film className="h-4 w-4" />;
+		default:
+			return <FileText className="h-4 w-4" />;
+	}
+}
+
+function classifyFile(file: File): string {
+	return ACCEPTED_TYPES[file.type] || "text";
+}
+
 export default function AskPage() {
 	const { user, isLoaded } = useUser();
 	const [query, setQuery] = useState("");
@@ -99,61 +167,233 @@ export default function AskPage() {
 		{
 			role: "ai",
 			content:
-				"Hello! I am your research assistant. Ask me anything about the papers in your personal database.",
+				"Hello! I'm your research assistant. Ask me anything about your papers, or attach images, PDFs, audio, video, and documents for me to analyze.",
 		},
 	]);
 	const [isLoading, setIsLoading] = useState(false);
+	const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+	const [isDragging, setIsDragging] = useState(false);
+	const [isRecording, setIsRecording] = useState(false);
+	const [recordingTime, setRecordingTime] = useState(0);
+
+	const fileInputRef = useRef<HTMLInputElement>(null);
+	const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+	const audioChunksRef = useRef<Blob[]>([]);
+	const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+	const textareaRef = useRef<HTMLTextAreaElement>(null);
+	const chatEndRef = useRef<HTMLDivElement>(null);
+
+	// Auto-scroll to bottom on new messages
+	useEffect(() => {
+		chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+	}, [messages, isLoading]);
+
+	// Auto-resize textarea
+	useEffect(() => {
+		if (textareaRef.current) {
+			textareaRef.current.style.height = "auto";
+			textareaRef.current.style.height =
+				Math.min(textareaRef.current.scrollHeight, 160) + "px";
+		}
+	}, [query]);
+
+	const addFiles = useCallback((fileList: FileList | File[]) => {
+		const newFiles: AttachedFile[] = [];
+		for (const file of Array.from(fileList)) {
+			if (file.size > 25 * 1024 * 1024) {
+				alert(`${file.name} exceeds 25MB limit`);
+				continue;
+			}
+			const type = classifyFile(file) as AttachedFile["type"];
+			const attached: AttachedFile = { file, type };
+
+			if (type === "image") {
+				attached.preview = URL.createObjectURL(file);
+			}
+			newFiles.push(attached);
+		}
+		setAttachedFiles((prev) => [...prev, ...newFiles]);
+	}, []);
+
+	const removeFile = (index: number) => {
+		setAttachedFiles((prev) => {
+			const removed = prev[index];
+			if (removed.preview) URL.revokeObjectURL(removed.preview);
+			return prev.filter((_, i) => i !== index);
+		});
+	};
+
+	// Voice recording
+	const startRecording = async () => {
+		try {
+			const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+			const recorder = new MediaRecorder(stream);
+			audioChunksRef.current = [];
+
+			recorder.ondataavailable = (e) => {
+				if (e.data.size > 0) audioChunksRef.current.push(e.data);
+			};
+
+			recorder.onstop = () => {
+				const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+				const file = new File([blob], `voice-${Date.now()}.webm`, {
+					type: "audio/webm",
+				});
+				addFiles([file]);
+				stream.getTracks().forEach((t) => t.stop());
+			};
+
+			recorder.start();
+			mediaRecorderRef.current = recorder;
+			setIsRecording(true);
+			setRecordingTime(0);
+			recordingIntervalRef.current = setInterval(
+				() => setRecordingTime((t) => t + 1),
+				1000,
+			);
+		} catch {
+			alert("Microphone access denied. Please allow microphone access.");
+		}
+	};
+
+	const stopRecording = () => {
+		mediaRecorderRef.current?.stop();
+		setIsRecording(false);
+		if (recordingIntervalRef.current) {
+			clearInterval(recordingIntervalRef.current);
+			recordingIntervalRef.current = null;
+		}
+	};
+
+	// Drag and drop
+	const handleDragOver = (e: React.DragEvent) => {
+		e.preventDefault();
+		setIsDragging(true);
+	};
+	const handleDragLeave = (e: React.DragEvent) => {
+		e.preventDefault();
+		setIsDragging(false);
+	};
+	const handleDrop = (e: React.DragEvent) => {
+		e.preventDefault();
+		setIsDragging(false);
+		if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+	};
 
 	const handleAsk = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (!query.trim() || !user) return;
+		if ((!query.trim() && attachedFiles.length === 0) || !user) return;
 
 		const userMessage = query.trim();
+		const currentFiles = [...attachedFiles];
 		setQuery("");
-		setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+		setAttachedFiles([]);
+
+		// Reset textarea height
+		if (textareaRef.current) textareaRef.current.style.height = "auto";
+
+		// Build conversation history (skip initial greeting, last 10 messages, truncated)
+		const history = messages
+			.slice(1) // skip the initial AI greeting
+			.slice(-10) // last 10 messages
+			.map((m) => ({
+				role: m.role === "ai" ? "assistant" : "user",
+				content: m.content.substring(0, 3000),
+			}));
+
+		setMessages((prev) => [
+			...prev,
+			{
+				role: "user",
+				content: userMessage || "(attached files)",
+				attachments: currentFiles.map((f) => ({
+					name: f.file.name,
+					type: f.type,
+				})),
+			},
+		]);
 		setIsLoading(true);
 
 		try {
-			const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/ask/`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					user_id: user.id,
-					question: userMessage,
-				}),
-			});
+			let data;
 
-			if (res.ok) {
-				const data = await res.json();
-				setMessages((prev) => [
-					...prev,
-					{ role: "ai", content: data.answer, sources: data.sources },
-				]);
+			if (currentFiles.length > 0) {
+				// Multimodal request with files
+				const formData = new FormData();
+				formData.append("user_id", user.id);
+				formData.append("question", userMessage);
+				formData.append("history", JSON.stringify(history));
+				for (const af of currentFiles) {
+					formData.append("files", af.file);
+				}
+
+				const res = await fetch(
+					`${process.env.NEXT_PUBLIC_API_URL}/ask/multimodal`,
+					{ method: "POST", body: formData },
+				);
+				if (!res.ok) throw new Error(`HTTP ${res.status}`);
+				data = await res.json();
 			} else {
-				setMessages((prev) => [
-					...prev,
-					{
-						role: "ai",
-						content:
-							"Sorry, I encountered an error connecting to the database.",
-					},
-				]);
+				// Text-only request
+				const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/ask/`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						user_id: user.id,
+						question: userMessage,
+						history,
+					}),
+				});
+				if (!res.ok) throw new Error(`HTTP ${res.status}`);
+				data = await res.json();
 			}
+
+			setMessages((prev) => [
+				...prev,
+				{ role: "ai", content: data.answer, sources: data.sources },
+			]);
 		} catch (error) {
 			console.error("Error asking question:", error);
 			setMessages((prev) => [
 				...prev,
-				{ role: "ai", content: "Network error. Is the backend running?" },
+				{
+					role: "ai",
+					content:
+						"Sorry, I encountered an error. Please check the backend is running.",
+				},
 			]);
 		} finally {
 			setIsLoading(false);
+			// Clean up image previews
+			currentFiles.forEach((f) => {
+				if (f.preview) URL.revokeObjectURL(f.preview);
+			});
 		}
 	};
 
 	if (!isLoaded) return null;
 
 	return (
-		<div className="flex flex-col min-h-screen bg-zinc-50 dark:bg-black">
+		<div
+			className="flex flex-col min-h-screen bg-zinc-50 dark:bg-black"
+			onDragOver={handleDragOver}
+			onDragLeave={handleDragLeave}
+			onDrop={handleDrop}
+		>
+			{/* Drag overlay */}
+			{isDragging && (
+				<div className="fixed inset-0 z-50 bg-blue-500/10 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+					<div className="bg-white dark:bg-zinc-900 rounded-2xl p-8 shadow-2xl border-2 border-dashed border-blue-500">
+						<p className="text-lg font-medium text-blue-600 dark:text-blue-400">
+							Drop files here to attach
+						</p>
+						<p className="text-sm text-zinc-500 mt-1">
+							Images, PDFs, Word docs, audio, video
+						</p>
+					</div>
+				</div>
+			)}
+
 			{/* Navigation Header */}
 			<header className="border-b bg-white dark:bg-zinc-950 px-6 py-4 flex justify-between items-center sticky top-0 z-10 shrink-0">
 				<div className="flex items-center gap-6">
@@ -197,14 +437,36 @@ export default function AskPage() {
 								}`}
 							>
 								{msg.role === "user" ? (
-									<p className="whitespace-pre-wrap leading-relaxed text-sm sm:text-base">
-										{msg.content}
-									</p>
+									<div>
+										{msg.content !== "(attached files)" && (
+											<p className="whitespace-pre-wrap leading-relaxed text-sm sm:text-base">
+												{msg.content}
+											</p>
+										)}
+										{/* Show attached file badges */}
+										{msg.attachments && msg.attachments.length > 0 && (
+											<div className="flex flex-wrap gap-1.5 mt-2">
+												{msg.attachments.map((att, i) => (
+													<span
+														key={i}
+														className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/20 dark:bg-black/20 text-xs"
+													>
+														{getFileIcon(att.type)}
+														<span className="max-w-30 truncate">
+															{att.name}
+														</span>
+													</span>
+												))}
+											</div>
+										)}
+									</div>
 								) : (
 									<div className="text-sm sm:text-base text-zinc-800 dark:text-zinc-200">
 										<ReactMarkdown
 											remarkPlugins={[remarkGfm, remarkMath]}
-											rehypePlugins={[rehypeKatex]}
+											rehypePlugins={[
+												[rehypeKatex, { throwOnError: false, strict: false }],
+											]}
 											components={markdownComponents}
 										>
 											{msg.content}
@@ -258,33 +520,150 @@ export default function AskPage() {
 								<Bot className="h-5 w-5 text-blue-600 dark:text-blue-400 animate-pulse" />
 							</div>
 							<div className="bg-white dark:bg-zinc-900 border shadow-sm rounded-2xl rounded-tl-sm p-4 text-zinc-500 text-sm">
-								Searching your database and thinking...
+								{attachedFiles.length > 0
+									? "Processing files and searching your database..."
+									: "Searching your database and thinking..."}
 							</div>
 						</div>
 					)}
+					<div ref={chatEndRef} />
 				</div>
 
 				{/* Input Area */}
 				<div className="pt-4 shrink-0 mt-auto bg-zinc-50 dark:bg-black">
-					<form onSubmit={handleAsk} className="flex gap-2 relative">
-						<Input
-							value={query}
-							onChange={(e) => setQuery(e.target.value)}
-							placeholder="Ask a question about your papers..."
-							className="pr-12 py-6 rounded-xl shadow-sm bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-800 focus-visible:ring-blue-500"
-							disabled={isLoading}
-						/>
-						<Button
-							type="submit"
-							size="icon"
-							disabled={!query.trim() || isLoading}
-							className="absolute right-1.5 top-1.5 h-9 w-9 rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
-						>
-							<Send className="h-4 w-4" />
-						</Button>
+					{/* File previews */}
+					{attachedFiles.length > 0 && (
+						<div className="flex flex-wrap gap-2 mb-3 px-1">
+							{attachedFiles.map((af, index) => (
+								<div
+									key={index}
+									className="relative group flex items-center gap-2 bg-white dark:bg-zinc-900 border rounded-lg px-3 py-2 text-xs shadow-sm"
+								>
+									{af.preview ? (
+										<Image
+											src={af.preview}
+											alt={af.file.name}
+											width={40}
+											height={40}
+											className="h-10 w-10 rounded object-cover"
+											unoptimized
+										/>
+									) : (
+										<div className="h-10 w-10 rounded bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500">
+											{getFileIcon(af.type)}
+										</div>
+									)}
+									<div className="max-w-25">
+										<p className="font-medium truncate">{af.file.name}</p>
+										<p className="text-zinc-400">
+											{(af.file.size / 1024).toFixed(0)}KB
+										</p>
+									</div>
+									<button
+										onClick={() => removeFile(index)}
+										className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+									>
+										<X className="h-3 w-3" />
+									</button>
+								</div>
+							))}
+						</div>
+					)}
+
+					<form onSubmit={handleAsk} className="relative">
+						<div className="flex items-end gap-2 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-800 rounded-xl shadow-sm focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition">
+							{/* Attach button */}
+							<button
+								type="button"
+								onClick={() => fileInputRef.current?.click()}
+								disabled={isLoading}
+								className="p-3 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition disabled:opacity-50"
+								title="Attach files"
+							>
+								<Paperclip className="h-5 w-5" />
+							</button>
+							<input
+								ref={fileInputRef}
+								type="file"
+								multiple
+								accept={Object.keys(ACCEPTED_TYPES).join(",")}
+								onChange={(e) => {
+									if (e.target.files) addFiles(e.target.files);
+									e.target.value = "";
+								}}
+								className="hidden"
+							/>
+
+							{/* Text input */}
+							<textarea
+								ref={textareaRef}
+								value={query}
+								onChange={(e) => setQuery(e.target.value)}
+								onKeyDown={(e) => {
+									if (e.key === "Enter" && !e.shiftKey) {
+										e.preventDefault();
+										handleAsk(e);
+									}
+								}}
+								placeholder={
+									attachedFiles.length > 0
+										? "Ask about the attached files..."
+										: "Ask a question about your papers..."
+								}
+								rows={1}
+								disabled={isLoading}
+								className="flex-1 py-3 bg-transparent border-0 resize-none focus:outline-none text-sm sm:text-base placeholder:text-zinc-400 disabled:opacity-50 max-h-40"
+							/>
+
+							{/* Voice record button */}
+							{!isRecording ? (
+								<button
+									type="button"
+									onClick={startRecording}
+									disabled={isLoading}
+									className="p-3 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition disabled:opacity-50"
+									title="Record voice"
+								>
+									<Mic className="h-5 w-5" />
+								</button>
+							) : (
+								<button
+									type="button"
+									onClick={stopRecording}
+									className="p-3 text-red-500 animate-pulse"
+									title="Stop recording"
+								>
+									<Square className="h-5 w-5 fill-current" />
+									<span className="sr-only">Recording: {recordingTime}s</span>
+								</button>
+							)}
+
+							{/* Send button */}
+							<Button
+								type="submit"
+								size="icon"
+								disabled={
+									(!query.trim() && attachedFiles.length === 0) || isLoading
+								}
+								className="m-1.5 h-9 w-9 rounded-lg bg-blue-600 hover:bg-blue-700 text-white shrink-0"
+							>
+								<Send className="h-4 w-4" />
+							</Button>
+						</div>
+
+						{/* Recording indicator */}
+						{isRecording && (
+							<div className="absolute -top-8 left-0 right-0 flex items-center justify-center">
+								<span className="inline-flex items-center gap-2 px-3 py-1 bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 text-xs rounded-full border border-red-200 dark:border-red-800">
+									<span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+									Recording... {recordingTime}s
+								</span>
+							</div>
+						)}
 					</form>
+
 					<p className="text-center text-xs text-zinc-400 mt-3">
-						AI can make mistakes. Verify information from the cited sources.
+						Attach images, PDFs, docs, audio, or video. AI can make mistakes.
 					</p>
 				</div>
 			</main>

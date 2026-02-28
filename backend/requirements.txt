@@ -9,6 +9,8 @@ charset-normalizer==3.4.4
 click==8.3.1
 cohere==5.15.0
 cryptography==46.0.5
+python-docx==1.2.0
+python-multipart==0.0.22
 deprecation==2.1.0
 distro==1.9.0
 fastapi==0.133.1

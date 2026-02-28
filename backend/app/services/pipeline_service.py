@@ -7,7 +7,7 @@ Flow:
   3. Global dedup → embed + summarize all new unique papers (once)
   4. For each user → Cohere rerank-v4.0-pro on their pool → top 25
 
-The LLM query optimizer (GPT-5-mini) transforms casual user interests into
+The LLM query optimizer (o4-mini) transforms casual user interests into
 precision search queries at onboarding. The cached profile eliminates the
 need for heavy post-retrieval ranking (RRF) — the APIs themselves return
 relevance-sorted results matched to exact technical vocabulary.
@@ -15,7 +15,9 @@ relevance-sorted results matched to exact technical vocabulary.
 Sources: ArXiv · Semantic Scholar · PubMed · OpenAlex
 Embedding: text-embedding-3-large (1536-dim)
 Re-ranking: Cohere rerank-v4.0-pro (32K context per doc)
-LLM: GPT-5-mini (summaries + query optimization)
+Summaries: o4-mini (reasoning_effort=low)
+Query Optimisation: o4-mini (reasoning_effort=low)
+Q&A: gpt-4.1 — best instruction-following model with 1M context
 PDF: Full-text extraction for ArXiv papers via PyMuPDF
 """
 
