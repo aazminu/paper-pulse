@@ -716,6 +716,7 @@ export default function AskPage() {
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const chatEndRef = useRef<HTMLDivElement>(null);
 	const chatMenuRef = useRef<HTMLDivElement>(null);
+	const paperHandledRef = useRef(false);
 
 	const API = process.env.NEXT_PUBLIC_API_URL;
 
@@ -784,6 +785,90 @@ export default function AskPage() {
 	useEffect(() => {
 		if (!user) return;
 		fetchChats();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [user]);
+
+	/* ── Handle ?paper= param — auto-explore a paper ─────────────────── */
+	useEffect(() => {
+		if (!user || paperHandledRef.current) return;
+		const paperId = searchParams.get("paper");
+		if (!paperId) return;
+		paperHandledRef.current = true;
+
+		(async () => {
+			try {
+				// 1. Fetch paper info
+				const paperRes = await fetch(`${API}/papers/${encodeURIComponent(paperId)}`);
+				if (!paperRes.ok) return;
+				const paper = await paperRes.json();
+
+				// 2. Create a new chat
+				const chatRes = await fetch(`${API}/chats/`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ user_id: user.id }),
+				});
+				if (!chatRes.ok) return;
+				const chat: Chat = await chatRes.json();
+				setChats((prev) => [chat, ...prev]);
+				setActiveChatId(chat.id);
+
+				// 3. Build an initial question about the paper
+				const initQuestion = `Tell me about this paper: "${paper.title}". Give me a comprehensive overview including the key contributions, methodology, main findings, and why it matters.`;
+
+				// 4. Show user message in UI
+				const userMsg: Message = { role: "user", content: initQuestion };
+				setMessages([userMsg]);
+				setIsLoading(true);
+
+				// 5. Save user message to DB
+				const saveUserPromise = saveMessage(chat.id, "user", initQuestion);
+
+				// 6. Call the ask endpoint
+				const askRes = await fetch(`${API}/ask/`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						user_id: user.id,
+						question: initQuestion,
+						history: [],
+					}),
+				});
+				if (!askRes.ok) throw new Error(`HTTP ${askRes.status}`);
+				const data = await askRes.json();
+
+				const aiMsg: Message = {
+					role: "ai",
+					content: data.answer,
+					sources: data.sources,
+				};
+				setMessages((prev) => [...prev, aiMsg]);
+
+				await saveUserPromise;
+				await saveMessage(chat.id, "ai", data.answer, data.sources || []);
+
+				// 7. Update chat title
+				const titleText = paper.title.length > 40 ? paper.title.slice(0, 40) + "…" : paper.title;
+				setChats((prev) =>
+					prev.map((c) => c.id === chat.id ? { ...c, title: titleText } : c),
+				);
+				fetch(`${API}/chats/${chat.id}`, {
+					method: "PATCH",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ title: titleText }),
+				}).catch(() => {});
+
+				// 8. Clear paper param from URL
+				const url = new URL(window.location.href);
+				url.searchParams.delete("paper");
+				url.searchParams.set("chat", chat.id);
+				router.replace(url.pathname + url.search, { scroll: false });
+			} catch (e) {
+				console.error("Failed to explore paper:", e);
+			} finally {
+				setIsLoading(false);
+			}
+		})();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [user]);
 

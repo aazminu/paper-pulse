@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useUser, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
 	Card,
 	CardContent,
@@ -18,6 +19,7 @@ import {
 	BookmarkCheck,
 	ExternalLink,
 	BrainCircuit,
+	Sparkles,
 } from "lucide-react";
 
 // TypeScript interface based on our FastAPI backend response
@@ -69,6 +71,7 @@ function getSourceLinkText(source?: string): string {
 
 export default function FeedPage() {
 	const { user, isLoaded } = useUser();
+	const router = useRouter();
 	const [feed, setFeed] = useState<FeedItem[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
 
@@ -239,23 +242,33 @@ export default function FeedPage() {
 									</div>
 								</CardContent>
 								<CardFooter className="flex justify-between border-t pt-4">
-									<Button
-										variant="ghost"
-										size="sm"
-										className="gap-2"
-										onClick={() => toggleSave(item.id, item.is_saved)}
-									>
-										{item.is_saved ? (
-											<>
-												<BookmarkCheck className="h-4 w-4 text-blue-600" />{" "}
-												Saved
-											</>
-										) : (
-											<>
-												<Bookmark className="h-4 w-4" /> Save Paper
-											</>
-										)}
-									</Button>
+									<div className="flex items-center gap-2">
+										<Button
+											variant="ghost"
+											size="sm"
+											className="gap-2"
+											onClick={() => toggleSave(item.id, item.is_saved)}
+										>
+											{item.is_saved ? (
+												<>
+													<BookmarkCheck className="h-4 w-4 text-blue-600" />{" "}
+													Saved
+												</>
+											) : (
+												<>
+													<Bookmark className="h-4 w-4" /> Save Paper
+												</>
+											)}
+										</Button>
+										<Button
+											variant="ghost"
+											size="sm"
+											className="gap-2 text-purple-600 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-950"
+											onClick={() => router.push(`/ask?paper=${encodeURIComponent(item.paper.arxiv_id)}`)}
+										>
+											<Sparkles className="h-4 w-4" /> Explore with AI
+										</Button>
+									</div>
 									<Button variant="outline" size="sm" asChild className="gap-2">
 										<a
 											href={item.paper.url}

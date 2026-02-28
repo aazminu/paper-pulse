@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useUser, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
 	Card,
 	CardContent,
@@ -20,6 +21,7 @@ import {
 	BrainCircuit,
 	BookmarkX,
 	Search,
+	Sparkles,
 } from "lucide-react";
 
 interface SavedItem {
@@ -69,6 +71,7 @@ function getSourceLinkText(source?: string): string {
 
 export default function SavedPage() {
 	const { user, isLoaded } = useUser();
+	const router = useRouter();
 	const [saved, setSaved] = useState<SavedItem[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
 	const [searchQuery, setSearchQuery] = useState("");
@@ -265,14 +268,24 @@ export default function SavedPage() {
 									</div>
 								</CardContent>
 								<CardFooter className="flex justify-between border-t pt-4">
-									<Button
-										variant="ghost"
-										size="sm"
-										className="gap-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
-										onClick={() => unsave(item.id)}
-									>
-										<BookmarkX className="h-4 w-4" /> Unsave
-									</Button>
+									<div className="flex items-center gap-2">
+										<Button
+											variant="ghost"
+											size="sm"
+											className="gap-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+											onClick={() => unsave(item.id)}
+										>
+											<BookmarkX className="h-4 w-4" /> Unsave
+										</Button>
+										<Button
+											variant="ghost"
+											size="sm"
+											className="gap-2 text-purple-600 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-950"
+											onClick={() => router.push(`/ask?paper=${encodeURIComponent(item.paper.arxiv_id)}`)}
+										>
+											<Sparkles className="h-4 w-4" /> Explore with AI
+										</Button>
+									</div>
 									<Button variant="outline" size="sm" asChild className="gap-2">
 										<a
 											href={item.paper.url}
