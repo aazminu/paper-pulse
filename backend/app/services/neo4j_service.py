@@ -483,6 +483,7 @@ def get_full_graph_visualization(limit: int = 200) -> dict:
             RETURN p.arxiv_id AS paper_id,
                    p.title AS paper_title,
                    p.source AS paper_source,
+                   p.published_date AS paper_date,
                    collect(DISTINCT a.name) AS authors,
                    collect(DISTINCT {name: c.name, category: c.category}) AS concepts,
                    collect(DISTINCT cited.arxiv_id) AS cites
@@ -502,6 +503,7 @@ def get_full_graph_visualization(limit: int = 200) -> dict:
                     "label": record["paper_title"] or pid,
                     "type": "paper",
                     "source": record["paper_source"],
+                    "date": record["paper_date"],
                 })
                 seen_nodes.add(pid)
 
@@ -550,6 +552,140 @@ def get_full_graph_visualization(limit: int = 200) -> dict:
                     })
 
         return {"nodes": nodes, "edges": edges}
+
+
+def get_node_neighborhood(node_id: str, node_type: str) -> dict:
+    """
+    Return the immediate neighborhood of a node for the detail panel.
+    """
+    with get_session() as s:
+        if node_type == "paper":
+            result = s.run(
+                """
+                MATCH (p:Paper {arxiv_id: $nid})
+                OPTIONAL MATCH (a:Author)-[:AUTHORED]->(p)
+                OPTIONAL MATCH (a)-[:AFFILIATED_WITH]->(i:Institution)
+                OPTIONAL MATCH (p)-[:INVOLVES_CONCEPT]->(c:Concept)
+                OPTIONAL MATCH (p)-[:CITES]->(cited:Paper)
+                OPTIONAL MATCH (citedBy:Paper)-[:CITES]->(p)
+                RETURN p.title AS title,
+                       p.published_date AS date,
+                       p.source AS source,
+                       p.url AS url,
+                       collect(DISTINCT {name: a.name, institution: i.name}) AS authors,
+                       collect(DISTINCT {name: c.name, category: c.category}) AS concepts,
+                       collect(DISTINCT {id: cited.arxiv_id, title: cited.title}) AS cites,
+                       collect(DISTINCT {id: citedBy.arxiv_id, title: citedBy.title}) AS cited_by
+                """,
+                nid=node_id,
+            )
+            record = result.single()
+            if not record:
+                return {}
+            return {
+                "id": node_id,
+                "type": "paper",
+                "title": record["title"],
+                "date": record["date"],
+                "source": record["source"],
+                "url": record["url"],
+                "authors": [a for a in record["authors"] if a["name"]],
+                "concepts": [c for c in record["concepts"] if c["name"]],
+                "cites": [c for c in record["cites"] if c["id"]],
+                "cited_by": [c for c in record["cited_by"] if c["id"]],
+            }
+        elif node_type == "author":
+            # Remove "author:" prefix
+            name = node_id.replace("author:", "", 1)
+            result = s.run(
+                """
+                MATCH (a:Author {name_lower: $name_lower})-[:AUTHORED]->(p:Paper)
+                OPTIONAL MATCH (a)-[:AFFILIATED_WITH]->(i:Institution)
+                RETURN a.name AS name,
+                       collect(DISTINCT i.name) AS institutions,
+                       collect(DISTINCT {id: p.arxiv_id, title: p.title, date: p.published_date}) AS papers
+                """,
+                name_lower=name,
+            )
+            record = result.single()
+            if not record:
+                return {}
+            return {
+                "id": node_id,
+                "type": "author",
+                "name": record["name"],
+                "institutions": [i for i in record["institutions"] if i],
+                "papers": [p for p in record["papers"] if p["id"]],
+            }
+        elif node_type == "concept":
+            name = node_id.replace("concept:", "", 1)
+            result = s.run(
+                """
+                MATCH (c:Concept {name_lower: $name_lower})<-[:INVOLVES_CONCEPT]-(p:Paper)
+                RETURN c.name AS name,
+                       c.category AS category,
+                       collect(DISTINCT {id: p.arxiv_id, title: p.title, date: p.published_date}) AS papers
+                ORDER BY p.published_date DESC
+                """,
+                name_lower=name,
+            )
+            record = result.single()
+            if not record:
+                return {}
+            return {
+                "id": node_id,
+                "type": "concept",
+                "name": record["name"],
+                "category": record["category"],
+                "papers": [p for p in record["papers"] if p["id"]],
+            }
+        return {}
+
+
+def search_graph_nodes(query: str, limit: int = 20) -> list[dict]:
+    """Full-text search across papers, authors, and concepts."""
+    results = []
+    with get_session() as s:
+        q_lower = query.lower().strip()
+
+        # Search papers by title (contains)
+        paper_result = s.run(
+            """
+            MATCH (p:Paper)
+            WHERE toLower(p.title) CONTAINS $q
+            RETURN p.arxiv_id AS id, p.title AS label, 'paper' AS type, p.source AS source
+            ORDER BY p.published_date DESC
+            LIMIT $limit
+            """,
+            q=q_lower, limit=limit,
+        )
+        results.extend([dict(r) for r in paper_result])
+
+        # Search authors
+        author_result = s.run(
+            """
+            MATCH (a:Author)
+            WHERE a.name_lower CONTAINS $q
+            RETURN 'author:' + a.name_lower AS id, a.name AS label, 'author' AS type
+            LIMIT $limit
+            """,
+            q=q_lower, limit=limit,
+        )
+        results.extend([dict(r) for r in author_result])
+
+        # Search concepts
+        concept_result = s.run(
+            """
+            MATCH (c:Concept)
+            WHERE c.name_lower CONTAINS $q
+            RETURN 'concept:' + c.name_lower AS id, c.name AS label, 'concept' AS type, c.category AS category
+            LIMIT $limit
+            """,
+            q=q_lower, limit=limit,
+        )
+        results.extend([dict(r) for r in concept_result])
+
+    return results[:limit]
 
 
 def get_graph_stats() -> dict:

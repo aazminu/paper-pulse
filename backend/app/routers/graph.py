@@ -21,6 +21,8 @@ from app.services.neo4j_service import (
     get_concept_papers,
     get_full_graph_visualization,
     get_graph_stats,
+    get_node_neighborhood,
+    search_graph_nodes,
 )
 
 router = APIRouter(prefix="/graph", tags=["Knowledge Graph"])
@@ -75,6 +77,22 @@ def graph_statistics():
     """Get knowledge graph statistics."""
     stats = get_graph_stats()
     return stats
+
+
+@router.get("/node/{node_id:path}")
+def node_details(node_id: str, node_type: str = Query(...)):
+    """Get detailed neighborhood info for a single node."""
+    result = get_node_neighborhood(node_id, node_type)
+    if not result:
+        raise HTTPException(status_code=404, detail="Node not found")
+    return result
+
+
+@router.get("/search")
+def search_nodes(q: str = Query(..., min_length=1), limit: int = Query(default=20, le=50)):
+    """Search across papers, authors, and concepts."""
+    results = search_graph_nodes(q, limit=limit)
+    return {"results": results}
 
 
 _graph_populate_status = {"running": False, "last_result": None}
