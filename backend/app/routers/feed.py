@@ -13,8 +13,8 @@ def get_user_feed(user_id: str):
         response = supabase.table("feed_items") \
             .select("*, papers(*)") \
             .eq("user_id", user_id) \
+            .order("created_at", desc=True) \
             .order("relevance_score", desc=True) \
-            .limit(25) \
             .execute()
         
         if not response.data:
