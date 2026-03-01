@@ -694,6 +694,7 @@ export default function AskPage() {
 	});
 	const [messages, setMessages] = useState<Message[]>([]);
 	const [isLoading, setIsLoading] = useState(false);
+	const [streamingStage, setStreamingStage] = useState<string | null>(null);
 
 	// Attachments
 	const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
@@ -715,9 +716,10 @@ export default function AskPage() {
 	const audioChunksRef = useRef<Blob[]>([]);
 	const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
-	const chatEndRef = useRef<HTMLDivElement>(null);
+	const messagesContainerRef = useRef<HTMLDivElement>(null);
 	const chatMenuRef = useRef<HTMLDivElement>(null);
 	const paperHandledRef = useRef(false);
+	const streamingRef = useRef(false);
 
 	const API = process.env.NEXT_PUBLIC_API_URL;
 
@@ -823,12 +825,13 @@ export default function AskPage() {
 				const userMsg: Message = { role: "user", content: initQuestion };
 				setMessages([userMsg]);
 				setIsLoading(true);
+				streamingRef.current = true;
 
 				// 5. Save user message to DB
 				const saveUserPromise = saveMessage(chat.id, "user", initQuestion);
 
-				// 6. Call the ask endpoint
-				const askRes = await fetch(`${API}/ask/`, {
+				// 6. Call the streaming ask endpoint
+				const askRes = await fetch(`${API}/ask/stream`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({
@@ -838,17 +841,58 @@ export default function AskPage() {
 					}),
 				});
 				if (!askRes.ok) throw new Error(`HTTP ${askRes.status}`);
-				const data = await askRes.json();
 
-				const aiMsg: Message = {
-					role: "ai",
-					content: data.answer,
-					sources: data.sources,
+				let exploreAnswer = "";
+				let exploreSources: Source[] = [];
+				let exploreAiAdded = false;
+				const ensureExploreAi = () => {
+					if (!exploreAiAdded) {
+						exploreAiAdded = true;
+						setMessages((prev) => [...prev, { role: "ai" as const, content: "", sources: exploreSources }]);
+					}
 				};
-				setMessages((prev) => [...prev, aiMsg]);
+
+				await consumeSSE(
+					askRes,
+					(_stage, message) => { setStreamingStage(message); },
+					(sources) => {
+						exploreSources = sources;
+						if (exploreAiAdded) {
+							setMessages((prev) => {
+								const updated = [...prev];
+								const last = updated[updated.length - 1];
+								if (last?.role === "ai") updated[updated.length - 1] = { ...last, sources };
+								return updated;
+							});
+						}
+					},
+					(token) => {
+						ensureExploreAi();
+						exploreAnswer += token;
+						setStreamingStage(null);
+						setMessages((prev) => {
+							const updated = [...prev];
+							const last = updated[updated.length - 1];
+							if (last?.role === "ai") updated[updated.length - 1] = { ...last, content: exploreAnswer, sources: exploreSources };
+							return updated;
+						});
+					},
+					() => { setStreamingStage(null); },
+					(msg) => {
+						ensureExploreAi();
+						setMessages((prev) => {
+							const updated = [...prev];
+							const last = updated[updated.length - 1];
+							if (last?.role === "ai") updated[updated.length - 1] = { ...last, content: `Error: ${msg}` };
+							return updated;
+						});
+					},
+				);
 
 				await saveUserPromise;
-				await saveMessage(chat.id, "ai", data.answer, data.sources || []);
+				if (exploreAnswer) {
+					await saveMessage(chat.id, "ai", exploreAnswer, exploreSources);
+				}
 
 				// 7. Update chat title
 				const titleText =
@@ -873,6 +917,7 @@ export default function AskPage() {
 				console.error("Failed to explore paper:", e);
 			} finally {
 				setIsLoading(false);
+				streamingRef.current = false;
 			}
 		})();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -901,6 +946,7 @@ export default function AskPage() {
 			setMessages([]);
 			return;
 		}
+		if (streamingRef.current) return; // don't overwrite while streaming
 		loadChatMessages(activeChatId);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [activeChatId]);
@@ -1050,10 +1096,30 @@ export default function AskPage() {
 		}
 	}, [chatMenuOpen]);
 
+	/* ── Lock body scroll on this page ───────────────────────────────── */
+	useEffect(() => {
+		const html = document.documentElement;
+		const body = document.body;
+		html.style.overflow = "hidden";
+		body.style.overflow = "hidden";
+		return () => {
+			html.style.overflow = "";
+			body.style.overflow = "";
+		};
+	}, []);
+
 	/* ── Auto-scroll ─────────────────────────────────────────────────── */
 	useEffect(() => {
-		chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-	}, [messages, isLoading]);
+		const container = messagesContainerRef.current;
+		if (!container) return;
+		if (streamingRef.current) {
+			// Instant jump during streaming — no smooth animation to avoid jitter
+			container.scrollTop = container.scrollHeight;
+		} else {
+			// Smooth scroll for non-streaming updates (loading history, etc.)
+			container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+		}
+	}, [messages, isLoading, streamingStage]);
 
 	/* ── Auto-resize textarea ────────────────────────────────────────── */
 	useEffect(() => {
@@ -1170,6 +1236,54 @@ export default function AskPage() {
 		if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
 	};
 
+	/* ── SSE stream consumer helper ──────────────────────────────────── */
+
+	const consumeSSE = async (
+		response: Response,
+		onStage: (stage: string, message: string) => void,
+		onSources: (sources: Source[]) => void,
+		onToken: (token: string) => void,
+		onDone: () => void,
+		onError: (msg: string) => void,
+	) => {
+		const reader = response.body?.getReader();
+		if (!reader) { onError("No response body"); return; }
+		const decoder = new TextDecoder();
+		let buf = "";
+
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			buf += decoder.decode(value, { stream: true });
+
+			// SSE events are separated by double newlines
+			const parts = buf.split("\n\n");
+			buf = parts.pop() || "";              // keep last incomplete chunk
+
+			for (const part of parts) {
+				const lines = part.split("\n");
+				let eventType = "";
+				let dataStr = "";
+				for (const line of lines) {
+					if (line.startsWith("event: ")) eventType = line.slice(7);
+					else if (line.startsWith("data: ")) dataStr = line.slice(6);
+				}
+				if (!eventType || !dataStr) continue;
+
+				try {
+					const data = JSON.parse(dataStr);
+					switch (eventType) {
+						case "stage": onStage(data.stage, data.message); break;
+						case "sources": onSources(data); break;
+						case "token": onToken(data.t); break;
+						case "done": onDone(); break;
+						case "error": onError(data.message); break;
+					}
+				} catch { /* ignore parse errors */ }
+			}
+		}
+	};
+
 	/* ── Ask handler ─────────────────────────────────────────────────── */
 
 	const handleAsk = async (e: React.FormEvent) => {
@@ -1224,6 +1338,8 @@ export default function AskPage() {
 
 		setMessages((prev) => [...prev, userMsg]);
 		setIsLoading(true);
+		setStreamingStage(null);
+		streamingRef.current = true;
 
 		// Save user message to DB
 		const saveUserPromise = saveMessage(
@@ -1234,8 +1350,11 @@ export default function AskPage() {
 			userAttachments.map((a) => ({ name: a.name, type: a.type })),
 		);
 
+		let collectedAnswer = "";
+		let collectedSources: Source[] = [];
+
 		try {
-			let data;
+			let response: Response;
 
 			if (currentFiles.length > 0) {
 				const formData = new FormData();
@@ -1245,14 +1364,12 @@ export default function AskPage() {
 				for (const af of currentFiles) {
 					formData.append("files", af.file);
 				}
-				const res = await fetch(`${API}/ask/multimodal`, {
+				response = await fetch(`${API}/ask/stream/multimodal`, {
 					method: "POST",
 					body: formData,
 				});
-				if (!res.ok) throw new Error(`HTTP ${res.status}`);
-				data = await res.json();
 			} else {
-				const res = await fetch(`${API}/ask/`, {
+				response = await fetch(`${API}/ask/stream`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({
@@ -1261,22 +1378,80 @@ export default function AskPage() {
 						history,
 					}),
 				});
-				if (!res.ok) throw new Error(`HTTP ${res.status}`);
-				data = await res.json();
 			}
 
-			const aiMsg: Message = {
-				role: "ai",
-				content: data.answer,
-				sources: data.sources,
+			if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+			let aiMessageAdded = false;
+			const ensureAiMessage = () => {
+				if (!aiMessageAdded) {
+					aiMessageAdded = true;
+					setMessages((prev) => [...prev, { role: "ai" as const, content: "", sources: collectedSources }]);
+				}
 			};
-			setMessages((prev) => [...prev, aiMsg]);
+
+			await consumeSSE(
+				response,
+				// onStage
+				(_stage, message) => {
+					setStreamingStage(message);
+				},
+				// onSources
+				(sources) => {
+					collectedSources = sources;
+					if (aiMessageAdded) {
+						setMessages((prev) => {
+							const updated = [...prev];
+							const last = updated[updated.length - 1];
+							if (last?.role === "ai") {
+								updated[updated.length - 1] = { ...last, sources };
+							}
+							return updated;
+						});
+					}
+				},
+				// onToken
+				(token) => {
+					ensureAiMessage();
+					collectedAnswer += token;
+					setStreamingStage(null);
+					setMessages((prev) => {
+						const updated = [...prev];
+						const last = updated[updated.length - 1];
+						if (last?.role === "ai") {
+							updated[updated.length - 1] = { ...last, content: collectedAnswer, sources: collectedSources };
+						}
+						return updated;
+					});
+				},
+				// onDone
+				() => {
+					setStreamingStage(null);
+				},
+				// onError
+				(msg) => {
+					ensureAiMessage();
+					setMessages((prev) => {
+						const updated = [...prev];
+						const last = updated[updated.length - 1];
+						if (last?.role === "ai") {
+							updated[updated.length - 1] = {
+								...last,
+								content: `Sorry, an error occurred: ${msg}`,
+							};
+						}
+						return updated;
+					});
+				},
+			);
 
 			// Wait for user message save (may have generated title)
 			await saveUserPromise;
 
 			// Save AI response to DB
-			await saveMessage(chatId, "ai", data.answer, data.sources || []);
+			if (collectedAnswer) {
+				await saveMessage(chatId, "ai", collectedAnswer, collectedSources);
+			}
 
 			// Bump chat to top & generate title if still "New Chat"
 			setChats((prev) => {
@@ -1293,7 +1468,6 @@ export default function AskPage() {
 				// If title is still "New Chat", kick off a background rename
 				const current = updated.find((c) => c.id === chatId);
 				if (current && current.title === "New Chat" && userMessage) {
-					// Use truncated user message as immediate fallback, then try AI
 					const fallback =
 						userMessage.length > 40
 							? userMessage.slice(0, 40) + "…"
@@ -1322,6 +1496,8 @@ export default function AskPage() {
 			]);
 		} finally {
 			setIsLoading(false);
+			setStreamingStage(null);
+			streamingRef.current = false;
 		}
 	};
 
@@ -1334,7 +1510,7 @@ export default function AskPage() {
 
 	return (
 		<div
-			className="flex flex-col h-screen bg-zinc-50 dark:bg-black"
+			className="fixed inset-0 flex flex-col overflow-hidden bg-zinc-50 dark:bg-black"
 			onDragOver={handleDragOver}
 			onDragLeave={handleDragLeave}
 			onDrop={handleDrop}
@@ -1396,7 +1572,7 @@ export default function AskPage() {
 			</header>
 
 			{/* Body: sidebar + chat */}
-			<div className="flex grow overflow-hidden">
+			<div className="flex grow min-h-0 overflow-hidden">
 				{/* ── Sidebar ──────────────────────────────────────────────── */}
 				<aside
 					className={`shrink-0 border-r bg-white dark:bg-zinc-950 flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${
@@ -1572,7 +1748,7 @@ export default function AskPage() {
 				</aside>
 
 				{/* ── Chat area ────────────────────────────────────────────── */}
-				<main className="flex-1 flex flex-col overflow-hidden">
+				<main className="flex-1 flex flex-col min-h-0 overflow-hidden">
 					{isEmptyState ? (
 						<div className="flex-1 flex flex-col items-center justify-center p-6">
 							<div className="h-16 w-16 rounded-2xl bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center mb-6">
@@ -1607,9 +1783,12 @@ export default function AskPage() {
 					) : (
 						<>
 							{/* Messages */}
-							<div className="grow overflow-y-auto p-4 sm:p-6">
+							<div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
 								<div className="max-w-4xl mx-auto space-y-6 pb-6">
-									{messages.map((msg, index) => (
+									{messages.map((msg, index) => {
+										// Skip rendering empty AI messages (placeholder before first token)
+										if (msg.role === "ai" && !msg.content && (!msg.sources || msg.sources.length === 0)) return null;
+										return (
 										<div
 											key={index}
 											className={`flex gap-4 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
@@ -1713,19 +1892,23 @@ export default function AskPage() {
 												</div>
 											)}
 										</div>
-									))}
+									);
+									})}
 
-									{isLoading && (
+									{isLoading && streamingStage && (
 										<div className="flex gap-4 justify-start">
 											<div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center shrink-0 mt-1">
 												<Bot className="h-5 w-5 text-blue-600 dark:text-blue-400 animate-pulse" />
 											</div>
-											<div className="bg-white dark:bg-zinc-900 border shadow-sm rounded-2xl rounded-tl-sm p-4 text-zinc-500 text-sm">
-												Searching your database and thinking...
+											<div className="bg-white dark:bg-zinc-900 border shadow-sm rounded-2xl rounded-tl-sm p-4 text-zinc-500 text-sm flex items-center gap-2">
+												<svg className="h-4 w-4 animate-spin text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+													<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+													<path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+												</svg>
+												{streamingStage}
 											</div>
 										</div>
 									)}
-									<div ref={chatEndRef} />
 								</div>
 							</div>
 

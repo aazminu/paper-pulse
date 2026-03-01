@@ -1,11 +1,15 @@
+import json as _json
 from typing import Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from app.database import supabase
 from app.services.openai_service import (
     get_embedding,
     answer_question_with_context,
     answer_question_multimodal,
+    stream_answer_with_context,
+    stream_answer_multimodal,
     classify_query_intent,
 )
 from app.services.rerank_service import rerank_for_qa, rerank_chunks
@@ -338,3 +342,177 @@ async def ask_multimodal(
     except Exception as e:
         print(f"Error in multimodal Q&A: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STREAMING (SSE) ENDPOINTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _sse(event: str, data) -> str:
+    """Format a server-sent event line."""
+    payload = _json.dumps(data) if not isinstance(data, str) else data
+    return f"event: {event}\ndata: {payload}\n\n"
+
+
+@router.post("/stream", summary="Stream an answer via SSE (text only)")
+def ask_stream(request: AskRequest):
+    """
+    SSE events emitted:
+      stage   → {"stage": "...", "message": "..."}
+      sources → [{paper}, ...]
+      token   → {"t": "..."}
+      done    → {}
+      error   → {"message": "..."}
+    """
+    def generate():
+        try:
+            history = request.history or []
+
+            # 1. classify
+            yield _sse("stage", {"stage": "classifying", "message": "Understanding your question…"})
+            intent = classify_query_intent(request.question, len(history) > 0)
+
+            if intent in ("general", "follow_up"):
+                label = "Generating answer…" if intent == "general" else "Continuing conversation…"
+                yield _sse("stage", {"stage": "generating", "message": label})
+                yield _sse("sources", [])
+                for tok in stream_answer_with_context(request.question, [], history=history):
+                    yield _sse("token", {"t": tok})
+                yield _sse("done", {})
+                return
+
+            # 2. embed + search
+            yield _sse("stage", {"stage": "searching", "message": "Searching your paper library…"})
+            question_vector = get_embedding(request.question)
+            if not question_vector:
+                yield _sse("error", {"message": "Failed to embed question."})
+                return
+            context_papers = _retrieve_context(question_vector, request.user_id, request.question)
+
+            # 3. graph
+            yield _sse("stage", {"stage": "graphing", "message": "Querying knowledge graph…"})
+            graph_context = _get_graph_context(
+                [p["arxiv_id"] for p in context_papers]
+            ) if context_papers else ""
+
+            # send sources
+            yield _sse("sources", [
+                {
+                    "arxiv_id": p.get("arxiv_id", ""),
+                    "title": p.get("title", ""),
+                    "authors": p.get("authors", []),
+                    "source": p.get("source", ""),
+                    "url": p.get("url", ""),
+                    "published_date": str(p.get("published_date", "")),
+                }
+                for p in context_papers
+            ])
+
+            # 4. stream LLM
+            yield _sse("stage", {"stage": "generating", "message": "Generating answer…"})
+            for tok in stream_answer_with_context(
+                request.question, context_papers,
+                history=history, graph_context=graph_context,
+            ):
+                yield _sse("token", {"t": tok})
+
+            yield _sse("done", {})
+
+        except Exception as e:
+            print(f"Error in streaming Q&A: {e}")
+            yield _sse("error", {"message": str(e)})
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive",
+                 "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/stream/multimodal", summary="Stream a multimodal answer via SSE")
+async def ask_stream_multimodal(
+    user_id: str = Form(...),
+    question: str = Form(""),
+    files: list[UploadFile] = File(default=[]),
+    history: str = Form(default="[]"),
+):
+    """SSE streaming for multimodal (files + text) queries."""
+    try:
+        parsed_history: list[dict] = _json.loads(history) if history else []
+    except Exception:
+        parsed_history = []
+
+    # read file bytes before entering sync generator
+    attachments: list[dict] = []
+    file_text_parts: list[str] = []
+    for upload in files:
+        raw = await upload.read()
+        if len(raw) > MAX_FILE_SIZE:
+            continue
+        ct = upload.content_type or "application/octet-stream"
+        fn = upload.filename or "file"
+        result = process_file(raw, ct, fn)
+        if result is None:
+            continue
+        attachments.append(result)
+        if result["type"] == "text" and result.get("content"):
+            file_text_parts.append(result["content"][:2000])
+
+    combined_query = question
+    if file_text_parts:
+        combined_query = f"{question} {' '.join(file_text_parts)[:500]}".strip()
+
+    def generate():
+        try:
+            if not combined_query:
+                yield _sse("error", {"message": "Provide a question or attach a file."})
+                return
+
+            yield _sse("stage", {"stage": "searching", "message": "Searching your paper library…"})
+            question_vector = get_embedding(combined_query)
+            if not question_vector:
+                yield _sse("error", {"message": "Failed to embed question."})
+                return
+            context_papers = _retrieve_context(question_vector, user_id, combined_query)
+
+            yield _sse("stage", {"stage": "graphing", "message": "Querying knowledge graph…"})
+            graph_context = _get_graph_context(
+                [p["arxiv_id"] for p in context_papers]
+            ) if context_papers else ""
+
+            yield _sse("sources", [
+                {
+                    "arxiv_id": p.get("arxiv_id", ""),
+                    "title": p.get("title", ""),
+                    "authors": p.get("authors", []),
+                    "source": p.get("source", ""),
+                    "url": p.get("url", ""),
+                    "published_date": str(p.get("published_date", "")),
+                }
+                for p in context_papers
+            ])
+
+            yield _sse("stage", {"stage": "generating", "message": "Generating answer…"})
+            final_q = question or "Analyze the attached file(s) and relate to my papers."
+            for tok in stream_answer_multimodal(
+                question=final_q,
+                context_papers=context_papers,
+                attachments=attachments,
+                history=parsed_history,
+                graph_context=graph_context,
+            ):
+                yield _sse("token", {"t": tok})
+
+            yield _sse("done", {})
+
+        except Exception as e:
+            print(f"Error in multimodal streaming: {e}")
+            yield _sse("error", {"message": str(e)})
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive",
+                 "X-Accel-Buffering": "no"},
+    )

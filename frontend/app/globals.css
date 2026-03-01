@@ -130,3 +130,24 @@
 .katex-error {
 	color: inherit !important;
 }
+
+/* Hide KaTeX measurement canvas elements that Tailwind v4 reset makes visible */
+.katex canvas,
+.katex-html canvas {
+	display: none !important;
+}
+
+/* Prevent stray canvas elements from expanding page height */
+canvas:not([width]):not([class]) {
+	height: 0 !important;
+	overflow: hidden !important;
+}
+
+/* Hide browser-extension / DevTools inspector overlay canvases */
+canvas.__web-inspector-hide-shortcut__,
+canvas[popover] {
+	display: none !important;
+	width: 0 !important;
+	height: 0 !important;
+	pointer-events: none !important;
+}

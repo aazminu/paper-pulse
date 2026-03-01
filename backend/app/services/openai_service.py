@@ -368,6 +368,114 @@ def answer_question_with_context(
         return {"answer": "Sorry, I encountered an error while analyzing your papers.", "sources": []}
 
 
+def stream_answer_with_context(
+    question: str,
+    context_papers: list,
+    history: list[dict] | None = None,
+    graph_context: str = "",
+):
+    """
+    Streaming version of answer_question_with_context.
+    Yields (token: str) chunks as the LLM generates them.
+    """
+    context_text = _build_context_text(context_papers)
+
+    if context_text:
+        parts = [f"Context:\n{context_text}"]
+        if graph_context:
+            parts.append(graph_context)
+        parts.append(f"Question: {question}")
+        user_msg = "\n\n".join(parts)
+    else:
+        user_msg = question
+
+    messages = _build_messages(_QA_SYSTEM_PROMPT, history, user_msg)
+
+    try:
+        stream = client.chat.completions.create(
+            model=QA_MODEL,
+            messages=messages,
+            temperature=0.4,
+            max_tokens=MAX_COMPLETION_TOKENS,
+            stream=True,
+        )
+        for chunk in stream:
+            delta = chunk.choices[0].delta if chunk.choices else None
+            if delta and delta.content:
+                yield delta.content
+    except Exception as e:
+        print(f"Error in streaming answer: {e}")
+        yield "Sorry, I encountered an error while analyzing your papers."
+
+
+def stream_answer_multimodal(
+    question: str,
+    context_papers: list,
+    attachments: list[dict] | None = None,
+    history: list[dict] | None = None,
+    graph_context: str = "",
+):
+    """
+    Streaming version of answer_question_multimodal.
+    Yields (token: str) chunks as the LLM generates them.
+    """
+    attachments = attachments or []
+
+    context_text = _build_context_text(context_papers)
+
+    file_context_parts = []
+    for att in attachments:
+        if att["type"] == "text" and att.get("content"):
+            label = att.get("label", "Attached File")
+            file_context_parts.append(f"--- {label} ---\n{att['content']}")
+    file_context = "\n\n".join(file_context_parts)
+
+    system_prompt = (
+        _QA_SYSTEM_PROMPT + "\n\n"
+        "ATTACHMENTS:\n"
+        "The user may attach files (images, PDFs, documents, audio/video transcripts). "
+        "Analyze all attached content carefully and incorporate it into your answer. "
+        "If they share an image (screenshot, diagram, photo of notes, etc.), describe what "
+        "you see and connect it to the relevant papers in their library."
+    )
+
+    user_content: list[dict] = []
+    text_parts = []
+    if context_text:
+        text_parts.append(f"Paper Context:\n{context_text}")
+    if graph_context:
+        text_parts.append(graph_context)
+    if file_context:
+        text_parts.append(f"Attached Files:\n{file_context}")
+    text_parts.append(f"Question: {question}")
+    user_content.append({"type": "text", "text": "\n\n".join(text_parts)})
+
+    for att in attachments:
+        if att["type"] == "image" and att.get("data_url"):
+            user_content.append({
+                "type": "image_url",
+                "image_url": {"url": att["data_url"], "detail": "high"},
+            })
+
+    messages = _build_messages(system_prompt, history, user_content)
+
+    try:
+        stream = client.chat.completions.create(
+            model=QA_MODEL,
+            messages=messages,
+            temperature=0.4,
+            max_tokens=MAX_COMPLETION_TOKENS,
+            stream=True,
+        )
+        for chunk in stream:
+            delta = chunk.choices[0].delta if chunk.choices else None
+            if delta and delta.content:
+                yield delta.content
+    except Exception as e:
+        print(f"Error in multimodal streaming: {e}")
+        yield "Sorry, I encountered an error while analyzing your files."
+
+
 def answer_question_multimodal(
     question: str,
     context_papers: list,
