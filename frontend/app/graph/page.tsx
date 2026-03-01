@@ -25,7 +25,14 @@ import {
 	Eye,
 	EyeOff,
 	RotateCcw,
+	MousePointerClick,
+	FileText,
+	Download,
+	Copy,
+	Check,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import { MermaidRenderer } from "@/components/mermaid-renderer";
 
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
 	ssr: false,
@@ -155,6 +162,14 @@ export default function GraphPage() {
 	const [hiddenEdgeTypes, setHiddenEdgeTypes] = useState<Set<string>>(new Set());
 	const [hiddenNodes, setHiddenNodes] = useState<Set<string>>(new Set());
 
+	/* Synthesize-mode state */
+	const [selectMode, setSelectMode] = useState(false);
+	const [selectedForSynthesis, setSelectedForSynthesis] = useState<Set<string>>(new Set());
+	const [synthesisReport, setSynthesisReport] = useState<string | null>(null);
+	const [synthesizing, setSynthesizing] = useState(false);
+	const [reportOpen, setReportOpen] = useState(false);
+	const [copied, setCopied] = useState(false);
+
 	const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -258,6 +273,18 @@ export default function GraphPage() {
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		(node: any) => {
 			const gn = node as GraphNode;
+
+			// Select-mode: toggle in selection set instead of opening detail panel
+			if (selectMode) {
+				setSelectedForSynthesis((prev) => {
+					const next = new Set(prev);
+					if (next.has(gn.id)) next.delete(gn.id);
+					else next.add(gn.id);
+					return next;
+				});
+				return;
+			}
+
 			setSelectedNode(gn);
 			fetchNodeDetails(gn);
 			if (graphRef.current) {
@@ -265,7 +292,7 @@ export default function GraphPage() {
 				graphRef.current.zoom(4, 800);
 			}
 		},
-		[fetchNodeDetails],
+		[fetchNodeDetails, selectMode],
 	);
 
 	const handleSearchSelect = useCallback(
@@ -303,6 +330,55 @@ export default function GraphPage() {
 		setSelectedNode(null);
 		setNodeDetails(null);
 	};
+
+	/* ── Synthesize controls ── */
+	const toggleSelectMode = useCallback(() => {
+		setSelectMode((prev) => {
+			if (prev) setSelectedForSynthesis(new Set()); // exiting: clear selection
+			return !prev;
+		});
+	}, []);
+
+	const handleSynthesize = useCallback(async () => {
+		if (selectedForSynthesis.size === 0) return;
+		setSynthesizing(true);
+		setReportOpen(true);
+		setSynthesisReport(null);
+		try {
+			const res = await fetch(`${API}/graph/synthesize`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ node_ids: Array.from(selectedForSynthesis) }),
+			});
+			if (res.ok) {
+				const data = await res.json();
+				setSynthesisReport(data.markdown);
+			} else {
+				setSynthesisReport("Error generating report. Please try again.");
+			}
+		} catch {
+			setSynthesisReport("Network error. Please check your connection.");
+		}
+		setSynthesizing(false);
+	}, [selectedForSynthesis]);
+
+	const handleCopyReport = useCallback(() => {
+		if (!synthesisReport) return;
+		navigator.clipboard.writeText(synthesisReport);
+		setCopied(true);
+		setTimeout(() => setCopied(false), 2000);
+	}, [synthesisReport]);
+
+	const handleDownloadReport = useCallback(() => {
+		if (!synthesisReport) return;
+		const blob = new Blob([synthesisReport], { type: "text/markdown" });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement("a");
+		a.href = url;
+		a.download = "literature-review.md";
+		a.click();
+		URL.revokeObjectURL(url);
+	}, [synthesisReport]);
 
 	/* ── Toggle helpers ── */
 	const toggleNodeType = useCallback((type: string) => {
@@ -376,9 +452,10 @@ export default function GraphPage() {
 			const isSelected = selectedNode?.id === n.id;
 			const isHovered = hoveredNode === n.id;
 			const isDimmed = hoveredNode && !highlightNodes.has(n.id);
+			const isMarkedForSynthesis = selectMode && selectedForSynthesis.has(n.id);
 
 			const baseSize = n.type === "paper" ? 5 : n.type === "author" ? 4 : 3.5;
-			const size = isSelected ? baseSize * 2 : isHovered ? baseSize * 1.6 : baseSize;
+			const size = isSelected ? baseSize * 2 : isHovered ? baseSize * 1.6 : isMarkedForSynthesis ? baseSize * 1.4 : baseSize;
 
 			// Glow effect
 			if (isSelected || isHovered) {
@@ -410,6 +487,23 @@ export default function GraphPage() {
 				ctx.stroke();
 			}
 
+			// Synthesis selection indicator — pulsing dashed ring
+			if (isMarkedForSynthesis) {
+				ctx.beginPath();
+				ctx.arc(node.x!, node.y!, size + 3, 0, 2 * Math.PI);
+				ctx.strokeStyle = "#f59e0b";
+				ctx.lineWidth = 2 / globalScale;
+				ctx.setLineDash([3 / globalScale, 2 / globalScale]);
+				ctx.stroke();
+				ctx.setLineDash([]);
+
+				// Small checkmark dot
+				ctx.beginPath();
+				ctx.arc(node.x! + size + 1, node.y! - size - 1, 2.5, 0, 2 * Math.PI);
+				ctx.fillStyle = "#f59e0b";
+				ctx.fill();
+			}
+
 			// Labels
 			if (showLabels && (globalScale > 1.5 || isSelected || isHovered)) {
 				const label = n.label || n.id;
@@ -438,7 +532,7 @@ export default function GraphPage() {
 				ctx.fillText(displayLabel, node.x!, node.y! + size + 1 + padding);
 			}
 		},
-		[selectedNode, hoveredNode, highlightNodes, showLabels],
+		[selectedNode, hoveredNode, highlightNodes, showLabels, selectMode, selectedForSynthesis],
 	);
 
 	/* ── Render ── */
@@ -698,6 +792,20 @@ export default function GraphPage() {
 
 					{/* Graph controls — positioned to dodge the detail panel */}
 					<div className={`absolute top-3 z-30 flex items-center gap-1.5 transition-all ${selectedNode ? "right-[21rem]" : "right-3"}`}>
+						{/* Synthesize mode toggle */}
+						<button
+							onClick={toggleSelectMode}
+							className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border shadow-sm text-xs font-medium transition ${
+								selectMode
+									? "bg-amber-500 text-white border-amber-600 shadow-amber-200 dark:shadow-amber-900"
+									: "bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 border-zinc-200 dark:border-zinc-700"
+							}`}
+							title={selectMode ? "Exit select mode" : "Select papers to synthesize"}
+						>
+							<MousePointerClick className="h-3.5 w-3.5" />
+							{selectMode ? "Selecting…" : "Synthesize"}
+						</button>
+
 						<div className="bg-white dark:bg-zinc-900 rounded-lg border shadow-sm flex items-center">
 							<button onClick={handleZoomIn} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-l-lg transition" title="Zoom in">
 								<ZoomIn className="h-4 w-4" />
@@ -802,6 +910,50 @@ export default function GraphPage() {
 									Reset
 								</button>
 							)}
+						</div>
+					)}
+
+					{/* ── Synthesis selection bar ── */}
+					{selectMode && (
+						<div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 bg-white dark:bg-zinc-900 border border-amber-300 dark:border-amber-700 rounded-xl px-4 py-2.5 shadow-lg shadow-amber-100 dark:shadow-amber-900/20">
+							<div className="flex items-center gap-2">
+								<div className="h-6 w-6 rounded-full bg-amber-100 dark:bg-amber-900 flex items-center justify-center">
+									<MousePointerClick className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+								</div>
+								<p className="text-sm font-medium">
+									{selectedForSynthesis.size === 0
+										? "Click nodes to select"
+										: <><span className="text-amber-600 dark:text-amber-400 font-bold">{selectedForSynthesis.size}</span> selected</>}
+								</p>
+							</div>
+
+							{selectedForSynthesis.size > 0 && (
+								<>
+									<button
+										onClick={() => setSelectedForSynthesis(new Set())}
+										className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition"
+									>
+										Clear
+									</button>
+									<Button
+										onClick={handleSynthesize}
+										disabled={synthesizing}
+										size="sm"
+										className="h-8 bg-amber-500 hover:bg-amber-600 text-white gap-1.5 rounded-lg shadow-sm"
+									>
+										{synthesizing ? (
+											<Loader2 className="h-3.5 w-3.5 animate-spin" />
+										) : (
+											<FileText className="h-3.5 w-3.5" />
+										)}
+										Synthesize Report
+									</Button>
+								</>
+							)}
+
+							<button onClick={toggleSelectMode} className="p-1 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="Exit select mode">
+								<X className="h-4 w-4 text-zinc-400" />
+							</button>
 						</div>
 					)}
 
@@ -1086,6 +1238,123 @@ export default function GraphPage() {
 						</div>
 					)}
 				</main>
+
+				{/* ── Synthesis Report Panel ── */}
+				{reportOpen && (
+					<div className="fixed inset-0 z-50 flex justify-end">
+						{/* Backdrop */}
+						<div
+							className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+							onClick={() => setReportOpen(false)}
+						/>
+						{/* Panel */}
+						<div className="relative w-full max-w-2xl bg-white dark:bg-zinc-950 h-full shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-right duration-300">
+							{/* Panel header */}
+							<div className="border-b px-6 py-4 flex items-center justify-between shrink-0">
+								<div className="flex items-center gap-3">
+									<div className="h-9 w-9 rounded-lg bg-amber-100 dark:bg-amber-900 flex items-center justify-center">
+										<FileText className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+									</div>
+									<div>
+										<h2 className="text-lg font-semibold">Literature Review</h2>
+										<p className="text-xs text-zinc-500">
+											{selectedForSynthesis.size} papers analyzed
+										</p>
+									</div>
+								</div>
+								<div className="flex items-center gap-1.5">
+									{synthesisReport && (
+										<>
+											<button
+												onClick={handleCopyReport}
+												className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900 transition border"
+												title="Copy as Markdown"
+											>
+												{copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+												{copied ? "Copied" : "Copy"}
+											</button>
+											<button
+												onClick={handleDownloadReport}
+												className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900 transition border"
+												title="Download as .md file"
+											>
+												<Download className="h-3.5 w-3.5" />
+												Download
+											</button>
+										</>
+									)}
+									<button
+										onClick={() => setReportOpen(false)}
+										className="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900 transition"
+									>
+										<X className="h-4 w-4" />
+									</button>
+								</div>
+							</div>
+
+							{/* Panel content */}
+							<div className="flex-1 overflow-y-auto">
+								{synthesizing ? (
+									<div className="p-8 space-y-6">
+										<div className="flex items-center gap-3 text-zinc-500">
+											<Loader2 className="h-5 w-5 animate-spin text-amber-500" />
+											<p className="text-sm font-medium">Analyzing papers and generating review…</p>
+										</div>
+										{/* Skeleton shimmer */}
+										<div className="space-y-4 animate-pulse">
+											<div className="h-4 bg-zinc-200 dark:bg-zinc-800 rounded w-3/4" />
+											<div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-full" />
+											<div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-5/6" />
+											<div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-2/3" />
+											<div className="h-8 bg-zinc-200 dark:bg-zinc-800 rounded-lg w-full mt-6" />
+											<div className="h-32 bg-zinc-100 dark:bg-zinc-900 rounded-lg w-full border" />
+											<div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-full mt-4" />
+											<div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-4/5" />
+											<div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-3/4" />
+										</div>
+									</div>
+								) : synthesisReport ? (
+									<div className="p-6">
+										<article className="prose prose-zinc dark:prose-invert prose-sm max-w-none prose-headings:text-base prose-headings:font-semibold prose-p:leading-relaxed prose-li:leading-relaxed prose-pre:bg-transparent prose-pre:p-0">
+											<ReactMarkdown
+												components={{
+													code({ className, children, ...props }) {
+														const match = /language-(\w+)/.exec(className || "");
+														const codeStr = String(children).replace(/\n$/, "");
+
+														if (match?.[1] === "mermaid") {
+															return <MermaidRenderer code={codeStr} />;
+														}
+
+														// Inline code
+														if (!match) {
+															return (
+																<code className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-xs font-mono" {...props}>
+																	{children}
+																</code>
+															);
+														}
+
+														// Block code (non-mermaid)
+														return (
+															<pre className="rounded-lg border bg-zinc-50 dark:bg-zinc-900 p-4 overflow-x-auto">
+																<code className={`${className} text-xs font-mono`} {...props}>
+																	{children}
+																</code>
+															</pre>
+														);
+													},
+												}}
+											>
+												{synthesisReport}
+											</ReactMarkdown>
+										</article>
+									</div>
+								) : null}
+							</div>
+						</div>
+					</div>
+				)}
 			</div>
 		</div>
 	);

@@ -642,6 +642,94 @@ def get_node_neighborhood(node_id: str, node_type: str) -> dict:
         return {}
 
 
+def get_subgraph_for_synthesis(node_ids: list[str]) -> dict:
+    """
+    Given a list of node IDs (paper arxiv_ids, author:xxx, concept:xxx),
+    fetch a rich subgraph with papers, their authors, concepts, abstracts,
+    and citation relationships — everything the LLM needs for synthesis.
+    """
+    if not node_ids:
+        return {"papers": [], "citations": []}
+
+    # Separate paper IDs from other node types
+    paper_ids = [nid for nid in node_ids if not nid.startswith(("author:", "concept:"))]
+    author_names = [nid.replace("author:", "", 1) for nid in node_ids if nid.startswith("author:")]
+    concept_names = [nid.replace("concept:", "", 1) for nid in node_ids if nid.startswith("concept:")]
+
+    with get_session() as s:
+        # Collect paper IDs from authors and concepts into the paper set
+        if author_names:
+            res = s.run(
+                """
+                UNWIND $names AS name
+                MATCH (a:Author {name_lower: name})-[:AUTHORED]->(p:Paper)
+                RETURN DISTINCT p.arxiv_id AS pid
+                """,
+                names=author_names,
+            )
+            paper_ids.extend([r["pid"] for r in res if r["pid"]])
+
+        if concept_names:
+            res = s.run(
+                """
+                UNWIND $names AS name
+                MATCH (c:Concept {name_lower: name})<-[:INVOLVES_CONCEPT]-(p:Paper)
+                RETURN DISTINCT p.arxiv_id AS pid
+                """,
+                names=concept_names,
+            )
+            paper_ids.extend([r["pid"] for r in res if r["pid"]])
+
+        paper_ids = list(set(paper_ids))  # deduplicate
+
+        if not paper_ids:
+            return {"papers": [], "citations": []}
+
+        # Fetch full paper details
+        result = s.run(
+            """
+            UNWIND $pids AS pid
+            MATCH (p:Paper {arxiv_id: pid})
+            OPTIONAL MATCH (a:Author)-[:AUTHORED]->(p)
+            OPTIONAL MATCH (p)-[:INVOLVES_CONCEPT]->(c:Concept)
+            RETURN p.arxiv_id AS arxiv_id,
+                   p.title AS title,
+                   p.published_date AS date,
+                   p.source AS source,
+                   p.url AS url,
+                   collect(DISTINCT a.name) AS authors,
+                   collect(DISTINCT {name: c.name, category: c.category}) AS concepts
+            """,
+            pids=paper_ids,
+        )
+
+        papers = []
+        for record in result:
+            papers.append({
+                "arxiv_id": record["arxiv_id"],
+                "title": record["title"] or record["arxiv_id"],
+                "date": record["date"],
+                "source": record["source"],
+                "url": record["url"],
+                "authors": [a for a in record["authors"] if a],
+                "concepts": [c for c in record["concepts"] if c["name"]],
+            })
+
+        # Fetch citations within this subgraph
+        cites_result = s.run(
+            """
+            UNWIND $pids AS pid
+            MATCH (p:Paper {arxiv_id: pid})-[:CITES]->(cited:Paper)
+            WHERE cited.arxiv_id IN $pids
+            RETURN p.arxiv_id AS from_id, cited.arxiv_id AS to_id
+            """,
+            pids=paper_ids,
+        )
+        citations = [{"from": r["from_id"], "to": r["to_id"]} for r in cites_result]
+
+        return {"papers": papers, "citations": citations}
+
+
 def search_graph_nodes(query: str, limit: int = 20) -> list[dict]:
     """Full-text search across papers, authors, and concepts."""
     results = []

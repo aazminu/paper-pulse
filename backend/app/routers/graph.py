@@ -9,10 +9,12 @@ Endpoints:
   GET  /graph/concept/{name}           — Papers involving a concept
   GET  /graph/explore                  — Full graph for explorer view
   GET  /graph/stats                    — Graph statistics
+  POST /graph/synthesize               — Synthesize literature review from selected nodes
   POST /graph/populate                 — Trigger graph population manually
 """
 
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
+from pydantic import BaseModel
 from app.services.neo4j_service import (
     get_paper_graph,
     get_related_papers,
@@ -23,7 +25,9 @@ from app.services.neo4j_service import (
     get_graph_stats,
     get_node_neighborhood,
     search_graph_nodes,
+    get_subgraph_for_synthesis,
 )
+from app.services.openai_service import synthesize_literature_review
 
 router = APIRouter(prefix="/graph", tags=["Knowledge Graph"])
 
@@ -93,6 +97,30 @@ def search_nodes(q: str = Query(..., min_length=1), limit: int = Query(default=2
     """Search across papers, authors, and concepts."""
     results = search_graph_nodes(q, limit=limit)
     return {"results": results}
+
+
+class SynthesizeRequest(BaseModel):
+    node_ids: list[str]
+
+
+@router.post("/synthesize")
+def synthesize_report(req: SynthesizeRequest):
+    """Generate a literature review + Mermaid diagram from selected graph nodes."""
+    if not req.node_ids:
+        raise HTTPException(status_code=400, detail="No nodes selected")
+    if len(req.node_ids) > 30:
+        raise HTTPException(status_code=400, detail="Too many nodes (max 30)")
+
+    subgraph = get_subgraph_for_synthesis(req.node_ids)
+    if not subgraph["papers"]:
+        raise HTTPException(status_code=404, detail="No papers found for selected nodes")
+
+    markdown = synthesize_literature_review(subgraph)
+    return {
+        "markdown": markdown,
+        "paper_count": len(subgraph["papers"]),
+        "citation_count": len(subgraph["citations"]),
+    }
 
 
 _graph_populate_status = {"running": False, "last_result": None}

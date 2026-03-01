@@ -550,3 +550,103 @@ def answer_question_multimodal(
     except Exception as e:
         print(f"Error in multimodal answer: {e}")
         return {"answer": "Sorry, I encountered an error while analyzing your files.", "sources": []}
+
+
+# ---------------------------------------------------------------------------
+# Synthesize Literature Review + Mermaid Citation Diagram
+# ---------------------------------------------------------------------------
+
+_SYNTHESIS_SYSTEM_PROMPT = (
+    "You are an expert academic research synthesizer. Given a set of papers with "
+    "their metadata, authors, concepts, and citation relationships, produce a "
+    "comprehensive yet concise literature review.\n\n"
+    "OUTPUT FORMAT (use exactly this structure):\n"
+    "1. Start with a brief ## Overview paragraph (2-3 sentences) that frames the "
+    "research area these papers cover.\n\n"
+    "2. Write a ## Key Themes section that identifies 2-4 major themes or research "
+    "directions across the papers. For each theme, discuss how the papers relate "
+    "and build on each other. Use *Paper Title* in italics when referencing papers.\n\n"
+    "3. Write a ## Methodology Landscape section (2-3 sentences) noting common "
+    "methods, datasets, or techniques across the papers.\n\n"
+    "4. Write a ## Citation Flow section with a Mermaid flowchart showing how papers "
+    "cite each other. Use this EXACT format:\n\n"
+    "```mermaid\n"
+    "flowchart TD\n"
+    "    A[\"Short Paper Title A\"] --> B[\"Short Paper Title B\"]\n"
+    "    B --> C[\"Short Paper Title C\"]\n"
+    "```\n\n"
+    "Rules for the Mermaid diagram:\n"
+    "- Use single-letter node IDs (A, B, C, D, ...)\n"
+    "- Put short paper titles (max 40 chars) inside the brackets with double quotes\n"
+    "- Only include citation edges that exist in the data provided\n"
+    "- If there are no citations between papers, write a simple node-only diagram\n"
+    "- Arrow direction: citing paper --> cited paper\n\n"
+    "5. End with a ## Key Takeaways section with 3-5 bullet points summarizing the "
+    "most important insights from this body of work.\n\n"
+    "FORMATTING RULES:\n"
+    "- Use Markdown: **bold** for key terms, *italics* for paper titles\n"
+    "- Keep the total response under 800 words\n"
+    "- Be scholarly but accessible — no unnecessary jargon\n"
+    "- Do NOT include a title heading (the UI provides one)\n"
+)
+
+
+def synthesize_literature_review(subgraph: dict) -> str:
+    """
+    Given a subgraph (papers + citations), generate a literature review
+    with a Mermaid citation diagram using gpt-4.1.
+    Returns the full Markdown string.
+    """
+    papers = subgraph.get("papers", [])
+    citations = subgraph.get("citations", [])
+
+    if not papers:
+        return "No papers provided for synthesis."
+
+    # Build structured context for the LLM
+    paper_descriptions = []
+    for i, p in enumerate(papers):
+        lines = [f"Paper {i+1}: {p['title']}"]
+        if p.get("authors"):
+            lines.append(f"  Authors: {', '.join(p['authors'])}")
+        if p.get("date"):
+            lines.append(f"  Published: {p['date']}")
+        if p.get("source"):
+            lines.append(f"  Source: {p['source']}")
+        if p.get("concepts"):
+            concept_names = [c["name"] for c in p["concepts"] if c.get("name")]
+            if concept_names:
+                lines.append(f"  Key Concepts: {', '.join(concept_names)}")
+        if p.get("url"):
+            lines.append(f"  URL: {p['url']}")
+        lines.append(f"  ID: {p['arxiv_id']}")
+        paper_descriptions.append("\n".join(lines))
+
+    # Build citation map
+    citation_lines = []
+    title_map = {p["arxiv_id"]: p["title"] for p in papers}
+    for c in citations:
+        from_title = title_map.get(c["from"], c["from"])
+        to_title = title_map.get(c["to"], c["to"])
+        citation_lines.append(f"  \"{from_title}\" cites \"{to_title}\"")
+
+    user_msg = f"Papers ({len(papers)} total):\n\n" + "\n\n".join(paper_descriptions)
+    if citation_lines:
+        user_msg += "\n\nCitation Relationships:\n" + "\n".join(citation_lines)
+    else:
+        user_msg += "\n\nNo direct citation relationships found between these papers."
+
+    try:
+        response = client.chat.completions.create(
+            model=QA_MODEL,
+            messages=[
+                {"role": "system", "content": _SYNTHESIS_SYSTEM_PROMPT},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=0.3,
+            max_tokens=4096,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"Error synthesizing literature review: {e}")
+        return "Sorry, I encountered an error while generating the literature review."
