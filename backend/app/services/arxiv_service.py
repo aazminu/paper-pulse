@@ -82,21 +82,27 @@ def _fetch_with_queries(
             f"max_results={per_query}"
         )
 
-        try:
-            with urllib.request.urlopen(url, timeout=30) as response:
-                xml_data = response.read()
+        for attempt in range(3):
+            try:
+                with urllib.request.urlopen(url, timeout=60) as response:
+                    xml_data = response.read()
 
-            root = ET.fromstring(xml_data)
-            entries = root.findall('atom:entry', OAI_NS)
+                root = ET.fromstring(xml_data)
+                entries = root.findall('atom:entry', OAI_NS)
 
-            for entry in entries:
-                parsed = _parse_entry(entry)
-                if parsed and parsed["arxiv_id"] not in seen_ids:
-                    seen_ids.add(parsed["arxiv_id"])
-                    papers.append(parsed)
+                for entry in entries:
+                    parsed = _parse_entry(entry)
+                    if parsed and parsed["arxiv_id"] not in seen_ids:
+                        seen_ids.add(parsed["arxiv_id"])
+                        papers.append(parsed)
+                break  # success
 
-        except Exception as e:
-            print(f"  [ArXiv] Error for query '{query_text}': {e}")
+            except Exception as e:
+                if attempt < 2:
+                    print(f"  [ArXiv] Retry {attempt+1} for query '{query_text}': {e}")
+                    time.sleep(3 * (attempt + 1))
+                else:
+                    print(f"  [ArXiv] Failed after 3 attempts for query '{query_text}': {e}")
 
         time.sleep(ARXIV_RATE_LIMIT_SECONDS)
 
@@ -121,7 +127,7 @@ def _fetch_by_category(cat_part: str, max_results: int) -> List[dict]:
         )
 
         try:
-            with urllib.request.urlopen(url, timeout=30) as response:
+            with urllib.request.urlopen(url, timeout=60) as response:
                 xml_data = response.read()
 
             root = ET.fromstring(xml_data)

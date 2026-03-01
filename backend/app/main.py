@@ -12,12 +12,20 @@ from app.routers import feed
 from app.routers import ask
 from app.routers import chats
 from app.routers import papers
+from app.routers import graph
 from app.services.pipeline_service import run_daily_pipeline
 
 load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Initialise Neo4j schema
+    try:
+        from app.services.neo4j_service import init_schema, close_driver
+        init_schema()
+    except Exception as e:
+        print(f"[Neo4j] Schema init skipped: {e}")
+
     scheduler = BackgroundScheduler()
     
     # Schedule the pipeline to run every day at midnight UTC
@@ -29,6 +37,10 @@ async def lifespan(app: FastAPI):
     
     # This runs gracefully when the server shuts down
     scheduler.shutdown()
+    try:
+        close_driver()
+    except Exception:
+        pass
     print("Background scheduler shut down.")
 
 app = FastAPI(title="PaperPulse API", lifespan=lifespan)
@@ -48,6 +60,7 @@ app.include_router(feed.router)
 app.include_router(ask.router)
 app.include_router(chats.router)
 app.include_router(papers.router)
+app.include_router(graph.router)
 
 @app.get("/")
 def read_root():

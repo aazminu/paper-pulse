@@ -310,10 +310,16 @@ def run_daily_pipeline():
                         "chunk_text": chunk["chunk_text"],
                         "chunk_vector": vector,
                     }
-                    try:
-                        supabase.table("paper_chunks").insert(chunk_record).execute()
-                    except Exception as chunk_err:
-                        print(f"    Chunk insert error: {chunk_err}")
+                    for attempt in range(3):
+                        try:
+                            supabase.table("paper_chunks").insert(chunk_record).execute()
+                            break
+                        except Exception as chunk_err:
+                            if attempt < 2:
+                                import time as _t
+                                _t.sleep(2 * (attempt + 1))
+                            else:
+                                print(f"    Chunk insert failed after 3 attempts: {chunk_err}")
 
             print(f"  Stored {len(all_chunks)} chunks in paper_chunks table")
 
@@ -384,11 +390,26 @@ def run_daily_pipeline():
                 pass  # UNIQUE constraint — already in feed
 
     print(f"\n{'=' * 60}")
-    print(f"Pipeline complete!")
+    print(f"Feed pipeline complete!")
     print(f"  Users processed: {len(users)}")
     print(f"  Unique papers: {len(processed_papers)}")
     print(f"  Feed items created: {feed_items_created}")
     print(f"{'=' * 60}")
+
+    # ------------------------------------------------------------------
+    # Step 7: Knowledge Graph Population
+    # ------------------------------------------------------------------
+    graph_result = {}
+    try:
+        from app.services.graph_pipeline_service import run_graph_pipeline
+        new_paper_ids = [pid for pid, _ in papers_to_embed]
+        if new_paper_ids:
+            graph_result = run_graph_pipeline(paper_ids=new_paper_ids)
+        else:
+            print("\nNo new papers — skipping graph pipeline")
+    except Exception as e:
+        print(f"\n[Graph Pipeline] Error (non-fatal): {e}")
+        graph_result = {"status": "error", "message": str(e)}
 
     return {
         "status": "success",
@@ -396,4 +417,5 @@ def run_daily_pipeline():
         "papers_processed": len(processed_papers),
         "feed_items_created": feed_items_created,
         "sources": source_counts,
+        "graph": graph_result,
     }

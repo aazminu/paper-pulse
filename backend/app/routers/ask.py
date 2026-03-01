@@ -16,6 +16,16 @@ router = APIRouter(
     tags=["Q&A"]
 )
 
+
+def _get_graph_context(paper_ids: list[str]) -> str:
+    """Fetch knowledge-graph context for retrieved papers (non-fatal)."""
+    try:
+        from app.services.neo4j_service import get_graph_context_for_query
+        return get_graph_context_for_query(paper_ids)
+    except Exception as e:
+        print(f"  [GraphRAG] Graph context unavailable: {e}")
+        return ""
+
 class AskRequest(BaseModel):
     user_id: str
     question: str
@@ -230,8 +240,14 @@ def ask_question(request: AskRequest):
                 "sources": [],
             }
 
+        # Enrich with knowledge graph context
+        graph_context = _get_graph_context([p["arxiv_id"] for p in context_papers])
+
         print(f"  {len(context_papers)} papers retrieved. Generating answer with gpt-4.1...")
-        return answer_question_with_context(request.question, context_papers, history=history)
+        return answer_question_with_context(
+            request.question, context_papers, history=history,
+            graph_context=graph_context,
+        )
 
     except Exception as e:
         print(f"Error in Q&A pipeline: {e}")
@@ -305,6 +321,9 @@ async def ask_multimodal(
 
         context_papers = _retrieve_context(question_vector, user_id, combined_query)
 
+        # Enrich with knowledge graph context
+        graph_context = _get_graph_context([p["arxiv_id"] for p in context_papers])
+
         print(f"  {len(context_papers)} papers, {len(attachments)} attachments. Generating answer...")
 
         # Use multimodal answer function
@@ -313,6 +332,7 @@ async def ask_multimodal(
             context_papers=context_papers,
             attachments=attachments,
             history=parsed_history,
+            graph_context=graph_context,
         )
 
     except Exception as e:

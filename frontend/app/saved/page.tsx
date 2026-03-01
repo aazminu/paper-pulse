@@ -148,6 +148,12 @@ export default function SavedPage() {
 						>
 							Ask AI
 						</Link>
+						<Link
+							href="/graph"
+							className="hover:text-black dark:hover:text-white transition"
+						>
+							Graph
+						</Link>
 					</nav>
 				</div>
 				<UserButton />
@@ -213,9 +219,7 @@ export default function SavedPage() {
 					<div className="text-center py-16 border-2 border-dashed rounded-xl">
 						<Search className="mx-auto h-10 w-10 text-zinc-300 mb-3" />
 						<h3 className="text-lg font-medium">No matching papers.</h3>
-						<p className="text-zinc-500 mt-1">
-							Try a different search term.
-						</p>
+						<p className="text-zinc-500 mt-1">Try a different search term.</p>
 					</div>
 				)}
 
@@ -281,7 +285,11 @@ export default function SavedPage() {
 											variant="ghost"
 											size="sm"
 											className="gap-2 text-purple-600 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-950"
-											onClick={() => router.push(`/ask?paper=${encodeURIComponent(item.paper.arxiv_id)}`)}
+											onClick={() =>
+												router.push(
+													`/ask?paper=${encodeURIComponent(item.paper.arxiv_id)}`,
+												)
+											}
 										>
 											<Sparkles className="h-4 w-4" /> Explore with AI
 										</Button>

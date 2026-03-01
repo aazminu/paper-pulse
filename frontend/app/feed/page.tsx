@@ -222,6 +222,12 @@ export default function FeedPage() {
 						>
 							Ask AI
 						</Link>
+						<Link
+							href="/graph"
+							className="hover:text-black dark:hover:text-white transition"
+						>
+							Graph
+						</Link>
 					</nav>
 				</div>
 				<UserButton />

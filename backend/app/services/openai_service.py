@@ -206,6 +206,13 @@ _QA_SYSTEM_PROMPT = (
     "answer — do not say you lack information or need more context.\n"
     "- Maintain continuity: remember paper names, results, and details from earlier "
     "in the conversation.\n\n"
+    "KNOWLEDGE GRAPH:\n"
+    "- You may receive a 'Knowledge Graph Context' section listing relationships "
+    "between papers: shared concepts, citation links, co-authors, and institutions.\n"
+    "- Use this to provide richer, more connected answers: mention related work, "
+    "cite how papers build on each other, and identify key researchers.\n"
+    "- If a user asks about connections, relationships, or 'what papers relate to X', "
+    "lean heavily on graph context.\n\n"
     "FORMATTING:\n"
     "- Full Markdown is rendered. Use rich formatting to make answers scannable:\n"
     "  - ## and ### subheadings for clear sections (but NOT as the very first line).\n"
@@ -327,16 +334,22 @@ def answer_question_with_context(
     question: str,
     context_papers: list,
     history: list[dict] | None = None,
+    graph_context: str = "",
 ) -> dict:
     """
     Uses gpt-4.1 to answer a user's question based on the provided papers.
     Supports conversation history for follow-up questions.
+    Optionally includes knowledge graph context (citations, concepts, co-authors).
     """
     context_text = _build_context_text(context_papers)
 
     # Only include the context block when there are papers
     if context_text:
-        user_msg = f"Context:\n{context_text}\n\nQuestion: {question}"
+        parts = [f"Context:\n{context_text}"]
+        if graph_context:
+            parts.append(graph_context)
+        parts.append(f"Question: {question}")
+        user_msg = "\n\n".join(parts)
     else:
         user_msg = question
 
@@ -360,6 +373,7 @@ def answer_question_multimodal(
     context_papers: list,
     attachments: list[dict] | None = None,
     history: list[dict] | None = None,
+    graph_context: str = "",
 ) -> dict:
     """
     Multimodal Q&A using gpt-4.1 vision.
@@ -395,10 +409,12 @@ def answer_question_multimodal(
     # Build message content parts (text + images)
     user_content: list[dict] = []
 
-    # Text part: question + paper context + file context
+    # Text part: question + paper context + graph context + file context
     text_parts = []
     if context_text:
         text_parts.append(f"Paper Context:\n{context_text}")
+    if graph_context:
+        text_parts.append(graph_context)
     if file_context:
         text_parts.append(f"Attached Files:\n{file_context}")
     text_parts.append(f"Question: {question}")

@@ -37,6 +37,7 @@ import ReactMarkdown, { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
+import RelatedPapers from "@/components/RelatedPapers";
 
 /* ── Types ─────────────────────────────────────────────────────────────── */
 
@@ -798,7 +799,9 @@ export default function AskPage() {
 		(async () => {
 			try {
 				// 1. Fetch paper info
-				const paperRes = await fetch(`${API}/papers/${encodeURIComponent(paperId)}`);
+				const paperRes = await fetch(
+					`${API}/papers/${encodeURIComponent(paperId)}`,
+				);
 				if (!paperRes.ok) return;
 				const paper = await paperRes.json();
 
@@ -848,9 +851,12 @@ export default function AskPage() {
 				await saveMessage(chat.id, "ai", data.answer, data.sources || []);
 
 				// 7. Update chat title
-				const titleText = paper.title.length > 40 ? paper.title.slice(0, 40) + "…" : paper.title;
+				const titleText =
+					paper.title.length > 40
+						? paper.title.slice(0, 40) + "…"
+						: paper.title;
 				setChats((prev) =>
-					prev.map((c) => c.id === chat.id ? { ...c, title: titleText } : c),
+					prev.map((c) => (c.id === chat.id ? { ...c, title: titleText } : c)),
 				);
 				fetch(`${API}/chats/${chat.id}`, {
 					method: "PATCH",
@@ -1378,6 +1384,12 @@ export default function AskPage() {
 						<Link href="/ask" className="text-black dark:text-white">
 							Ask AI
 						</Link>
+						<Link
+							href="/graph"
+							className="hover:text-black dark:hover:text-white transition"
+						>
+							Graph
+						</Link>
 					</nav>
 				</div>
 				<UserButton />
@@ -1685,6 +1697,12 @@ export default function AskPage() {
 																</div>
 															</div>
 														))}
+														{/* Related papers from knowledge graph */}
+														{msg.sources.length > 0 && (
+															<RelatedPapers
+																arxivId={msg.sources[0].arxiv_id}
+															/>
+														)}
 													</div>
 												)}
 											</div>
