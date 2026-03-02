@@ -9,7 +9,11 @@ Endpoints:
   GET  /graph/concept/{name}           — Papers involving a concept
   GET  /graph/explore                  — Full graph for explorer view
   GET  /graph/stats                    — Graph statistics
+  GET  /graph/clusters                 — Auto-detected paper clusters
   POST /graph/synthesize               — Synthesize literature review from selected nodes
+  GET  /graph/reports                  — List saved synthesis reports
+  POST /graph/reports                  — Save a synthesis report
+  DELETE /graph/reports/{id}           — Delete a saved report
   POST /graph/populate                 — Trigger graph population manually
 """
 
@@ -26,8 +30,10 @@ from app.services.neo4j_service import (
     get_node_neighborhood,
     search_graph_nodes,
     get_subgraph_for_synthesis,
+    detect_clusters,
 )
 from app.services.openai_service import synthesize_literature_review
+from app.database import supabase
 
 router = APIRouter(prefix="/graph", tags=["Knowledge Graph"])
 
@@ -99,8 +105,16 @@ def search_nodes(q: str = Query(..., min_length=1), limit: int = Query(default=2
     return {"results": results}
 
 
+@router.get("/clusters")
+def get_clusters(limit: int = Query(default=200, le=500)):
+    """Detect paper clusters based on shared concepts and citations."""
+    clusters = detect_clusters(limit=limit)
+    return {"clusters": clusters}
+
+
 class SynthesizeRequest(BaseModel):
     node_ids: list[str]
+    title: str | None = None
 
 
 @router.post("/synthesize")
@@ -121,6 +135,64 @@ def synthesize_report(req: SynthesizeRequest):
         "paper_count": len(subgraph["papers"]),
         "citation_count": len(subgraph["citations"]),
     }
+
+
+# ── Saved Reports ─────────────────────────────────────────────────────────
+
+class SaveReportRequest(BaseModel):
+    user_id: str
+    title: str
+    markdown: str
+    node_ids: list[str]
+    paper_count: int = 0
+    citation_count: int = 0
+
+
+@router.get("/reports")
+def list_reports(user_id: str = Query(...)):
+    """List saved synthesis reports for a user."""
+    try:
+        resp = (
+            supabase.table("synthesis_reports")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return resp.data or []
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/reports")
+def save_report(req: SaveReportRequest):
+    """Save a synthesis report."""
+    try:
+        resp = (
+            supabase.table("synthesis_reports")
+            .insert({
+                "user_id": req.user_id,
+                "title": req.title,
+                "markdown": req.markdown,
+                "node_ids": req.node_ids,
+                "paper_count": req.paper_count,
+                "citation_count": req.citation_count,
+            })
+            .execute()
+        )
+        return resp.data[0] if resp.data else {}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/reports/{report_id}")
+def delete_report(report_id: str):
+    """Delete a saved synthesis report."""
+    try:
+        supabase.table("synthesis_reports").delete().eq("id", report_id).execute()
+        return {"status": "deleted"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 _graph_populate_status = {"running": False, "last_result": None}

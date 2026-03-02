@@ -554,6 +554,110 @@ def get_full_graph_visualization(limit: int = 200) -> dict:
         return {"nodes": nodes, "edges": edges}
 
 
+def detect_clusters(limit: int = 200) -> list[dict]:
+    """
+    Detect paper clusters based on shared concepts and citations.
+    Uses a simple connected-component approach on a paper similarity graph:
+      - Two papers are linked if they share >= 2 concepts or have a citation edge.
+    Returns a list of clusters, each with a label (top concepts), member paper IDs,
+    and a color index.
+    """
+    from collections import defaultdict, deque
+
+    with get_session() as s:
+        # Fetch papers with their concept lists
+        result = s.run(
+            """
+            MATCH (p:Paper)
+            WITH p ORDER BY p.published_date DESC LIMIT $limit
+            OPTIONAL MATCH (p)-[:INVOLVES_CONCEPT]->(c:Concept)
+            RETURN p.arxiv_id AS pid,
+                   p.title AS title,
+                   collect(DISTINCT c.name) AS concepts
+            """,
+            limit=limit,
+        )
+        papers = {}
+        for r in result:
+            if r["pid"]:
+                papers[r["pid"]] = {
+                    "title": r["title"] or r["pid"],
+                    "concepts": set(c for c in r["concepts"] if c),
+                }
+
+        if not papers:
+            return []
+
+        # Fetch citation edges between these papers
+        pids = list(papers.keys())
+        cite_result = s.run(
+            """
+            UNWIND $pids AS pid
+            MATCH (p:Paper {arxiv_id: pid})-[:CITES]->(cited:Paper)
+            WHERE cited.arxiv_id IN $pids
+            RETURN p.arxiv_id AS from_id, cited.arxiv_id AS to_id
+            """,
+            pids=pids,
+        )
+        citation_pairs = set()
+        for r in cite_result:
+            citation_pairs.add((r["from_id"], r["to_id"]))
+            citation_pairs.add((r["to_id"], r["from_id"]))  # bidirectional for clustering
+
+    # Build adjacency: papers linked by shared concepts (>= 2) or citations
+    adj: dict[str, set[str]] = defaultdict(set)
+    pid_list = list(papers.keys())
+    for i in range(len(pid_list)):
+        for j in range(i + 1, len(pid_list)):
+            a, b = pid_list[i], pid_list[j]
+            shared = papers[a]["concepts"] & papers[b]["concepts"]
+            if len(shared) >= 2 or (a, b) in citation_pairs:
+                adj[a].add(b)
+                adj[b].add(a)
+
+    # BFS for connected components
+    visited: set[str] = set()
+    clusters_raw: list[list[str]] = []
+    for pid in pid_list:
+        if pid in visited:
+            continue
+        component: list[str] = []
+        queue: deque[str] = deque([pid])
+        while queue:
+            node = queue.popleft()
+            if node in visited:
+                continue
+            visited.add(node)
+            component.append(node)
+            for neighbor in adj.get(node, []):
+                if neighbor not in visited:
+                    queue.append(neighbor)
+        clusters_raw.append(component)
+
+    # Build cluster output — only clusters with >= 2 papers
+    clusters = []
+    for idx, members in enumerate(sorted(clusters_raw, key=len, reverse=True)):
+        if len(members) < 2:
+            continue
+        # Find top concepts across cluster members
+        concept_count: dict[str, int] = defaultdict(int)
+        for pid in members:
+            for c in papers[pid]["concepts"]:
+                concept_count[c] += 1
+        top_concepts = sorted(concept_count, key=concept_count.get, reverse=True)[:3]  # type: ignore[arg-type]
+        label = " + ".join(top_concepts) if top_concepts else f"Cluster {idx + 1}"
+
+        clusters.append({
+            "id": idx,
+            "label": label,
+            "paper_ids": members,
+            "size": len(members),
+            "top_concepts": top_concepts,
+        })
+
+    return clusters
+
+
 def get_node_neighborhood(node_id: str, node_type: str) -> dict:
     """
     Return the immediate neighborhood of a node for the detail panel.

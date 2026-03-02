@@ -30,6 +30,13 @@ import {
 	Download,
 	Copy,
 	Check,
+	Camera,
+	Layers,
+	Trash2,
+	Clock,
+	ChevronDown,
+	BookMarked,
+	Save,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { MermaidRenderer } from "@/components/mermaid-renderer";
@@ -98,6 +105,24 @@ interface SearchResult {
 	category?: string;
 }
 
+interface Cluster {
+	id: number;
+	label: string;
+	paper_ids: string[];
+	size: number;
+	top_concepts: string[];
+}
+
+interface SavedReport {
+	id: string;
+	title: string;
+	markdown: string;
+	node_ids: string[];
+	paper_count: number;
+	citation_count: number;
+	created_at: string;
+}
+
 /* ── Constants ── */
 const NODE_COLORS: Record<string, string> = {
 	paper: "#3b82f6",
@@ -136,7 +161,7 @@ const getEdgeId = (val: string | GraphNode): string =>
 	typeof val === "string" ? val : val.id;
 
 export default function GraphPage() {
-	const { isLoaded } = useUser();
+	const { isLoaded, user } = useUser();
 	const router = useRouter();
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const graphRef = useRef<any>(null);
@@ -170,22 +195,35 @@ export default function GraphPage() {
 	const [reportOpen, setReportOpen] = useState(false);
 	const [copied, setCopied] = useState(false);
 
+	/* Cluster state */
+	const [clusters, setClusters] = useState<Cluster[]>([]);
+	const [clustersLoading, setClustersLoading] = useState(false);
+	const [clustersExpanded, setClustersExpanded] = useState(false);
+	const [highlightCluster, setHighlightCluster] = useState<Set<string> | null>(null);
+
+	/* Saved reports state */
+	const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
+	const [reportsOpen, setReportsOpen] = useState(false);
+	const [viewingReport, setViewingReport] = useState<SavedReport | null>(null);
+	const [savingReport, setSavingReport] = useState(false);
+	const [reportSaved, setReportSaved] = useState(false);
+
 	const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const searchInputRef = useRef<HTMLInputElement>(null);
 
 	/* ── Resize observer ── */
 	useEffect(() => {
+		if (!containerRef.current) return;
+		const el = containerRef.current;
 		const updateSize = () => {
-			if (containerRef.current) {
-				const rect = containerRef.current.getBoundingClientRect();
-				setDimensions({ width: rect.width, height: Math.max(rect.height, 400) });
-			}
+			const rect = el.getBoundingClientRect();
+			setDimensions({ width: rect.width, height: Math.max(rect.height, 400) });
 		};
 		updateSize();
 		const observer = new ResizeObserver(updateSize);
-		if (containerRef.current) observer.observe(containerRef.current);
+		observer.observe(el);
 		return () => observer.disconnect();
-	}, [sidebarOpen]);
+	}, [isLoaded]);
 
 	/* ── Fetch graph data ── */
 	useEffect(() => {
@@ -209,6 +247,35 @@ export default function GraphPage() {
 		};
 		fetchGraph();
 	}, [isLoaded]);
+
+	/* ── Fetch clusters ── */
+	useEffect(() => {
+		if (loading || graphData.nodes.length === 0) return;
+		const fetchClusters = async () => {
+			setClustersLoading(true);
+			try {
+				const res = await fetch(`${API}/graph/clusters?limit=300`);
+				if (res.ok) {
+					const data = await res.json();
+					setClusters(data.clusters || []);
+				}
+			} catch { /* ignore */ }
+			setClustersLoading(false);
+		};
+		fetchClusters();
+	}, [loading, graphData.nodes.length]);
+
+	/* ── Fetch saved reports ── */
+	useEffect(() => {
+		if (!user?.id) return;
+		const fetchReports = async () => {
+			try {
+				const res = await fetch(`${API}/graph/reports?user_id=${encodeURIComponent(user.id)}`);
+				if (res.ok) setSavedReports(await res.json());
+			} catch { /* ignore */ }
+		};
+		fetchReports();
+	}, [user?.id]);
 
 	/* ── Search debounce ── */
 	useEffect(() => {
@@ -341,6 +408,7 @@ export default function GraphPage() {
 
 	const handleSynthesize = useCallback(async () => {
 		if (selectedForSynthesis.size === 0) return;
+		setSelectMode(false);
 		setSynthesizing(true);
 		setReportOpen(true);
 		setSynthesisReport(null);
@@ -379,6 +447,107 @@ export default function GraphPage() {
 		a.click();
 		URL.revokeObjectURL(url);
 	}, [synthesisReport]);
+
+	/* ── Export graph as PNG ── */
+	const handleExportImage = useCallback(() => {
+		if (!graphRef.current) return;
+		const canvas = (containerRef.current?.querySelector("canvas") as HTMLCanvasElement) || null;
+		if (!canvas) return;
+		const url = canvas.toDataURL("image/png");
+		const a = document.createElement("a");
+		a.href = url;
+		a.download = "knowledge-graph.png";
+		a.click();
+	}, []);
+
+	/* ── Save report ── */
+	const handleSaveReport = useCallback(async () => {
+		if (!synthesisReport || !user?.id) return;
+		setSavingReport(true);
+		try {
+			const titleMatch = synthesisReport.match(/^#\s+(.+)$/m);
+			const title = titleMatch?.[1] || `Report — ${selectedForSynthesis.size} papers`;
+			const res = await fetch(`${API}/graph/reports`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					user_id: user.id,
+					title,
+					markdown: synthesisReport,
+					node_ids: Array.from(selectedForSynthesis),
+					paper_count: selectedForSynthesis.size,
+					citation_count: 0,
+				}),
+			});
+			if (res.ok) {
+				const saved = await res.json();
+				setSavedReports((prev) => [saved, ...prev]);
+				setReportSaved(true);
+				setTimeout(() => setReportSaved(false), 2500);
+			}
+		} catch { /* ignore */ }
+		setSavingReport(false);
+	}, [synthesisReport, user?.id, selectedForSynthesis]);
+
+	/* ── Delete saved report ── */
+	const handleDeleteReport = useCallback(async (reportId: string) => {
+		try {
+			await fetch(`${API}/graph/reports/${reportId}`, { method: "DELETE" });
+			setSavedReports((prev) => prev.filter((r) => r.id !== reportId));
+		} catch { /* ignore */ }
+	}, []);
+
+	/* ── Re-save a viewed report ── */
+	const handleResaveReport = useCallback(async () => {
+		if (!viewingReport || !user?.id) return;
+		setSavingReport(true);
+		try {
+			const res = await fetch(`${API}/graph/reports`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					user_id: user.id,
+					title: viewingReport.title,
+					markdown: viewingReport.markdown,
+					node_ids: viewingReport.node_ids,
+					paper_count: viewingReport.paper_count,
+					citation_count: viewingReport.citation_count ?? 0,
+				}),
+			});
+			if (res.ok) {
+				const saved = await res.json();
+				setSavedReports((prev) => [saved, ...prev]);
+				setViewingReport(saved);
+			}
+		} catch { /* ignore */ }
+		setSavingReport(false);
+	}, [viewingReport, user?.id]);
+
+	/* ── Synthesize a cluster ── */
+	const handleSynthesizeCluster = useCallback((cluster: Cluster) => {
+		setSelectedForSynthesis(new Set(cluster.paper_ids));
+		setSelectMode(false);
+		setHighlightCluster(null);
+		// Trigger synthesis immediately
+		setSynthesizing(true);
+		setReportOpen(true);
+		setSynthesisReport(null);
+		fetch(`${API}/graph/synthesize`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ node_ids: cluster.paper_ids }),
+		})
+			.then(async (res) => {
+				if (res.ok) {
+					const data = await res.json();
+					setSynthesisReport(data.markdown);
+				} else {
+					setSynthesisReport("Error generating report. Please try again.");
+				}
+			})
+			.catch(() => setSynthesisReport("Network error. Please check your connection."))
+			.finally(() => setSynthesizing(false));
+	}, []);
 
 	/* ── Toggle helpers ── */
 	const toggleNodeType = useCallback((type: string) => {
@@ -451,11 +620,13 @@ export default function GraphPage() {
 			const n = node as GraphNode;
 			const isSelected = selectedNode?.id === n.id;
 			const isHovered = hoveredNode === n.id;
-			const isDimmed = hoveredNode && !highlightNodes.has(n.id);
+			const isClusterDimmed = highlightCluster && !highlightCluster.has(n.id);
+			const isDimmed = (hoveredNode && !highlightNodes.has(n.id)) || isClusterDimmed;
 			const isMarkedForSynthesis = selectMode && selectedForSynthesis.has(n.id);
+			const isClusterHighlighted = highlightCluster && highlightCluster.has(n.id);
 
 			const baseSize = n.type === "paper" ? 5 : n.type === "author" ? 4 : 3.5;
-			const size = isSelected ? baseSize * 2 : isHovered ? baseSize * 1.6 : isMarkedForSynthesis ? baseSize * 1.4 : baseSize;
+			const size = isSelected ? baseSize * 2 : isHovered ? baseSize * 1.6 : isClusterHighlighted ? baseSize * 1.3 : isMarkedForSynthesis ? baseSize * 1.4 : baseSize;
 
 			// Glow effect
 			if (isSelected || isHovered) {
@@ -532,7 +703,7 @@ export default function GraphPage() {
 				ctx.fillText(displayLabel, node.x!, node.y! + size + 1 + padding);
 			}
 		},
-		[selectedNode, hoveredNode, highlightNodes, showLabels, selectMode, selectedForSynthesis],
+		[selectedNode, hoveredNode, highlightNodes, highlightCluster, showLabels, selectMode, selectedForSynthesis],
 	);
 
 	/* ── Render ── */
@@ -541,7 +712,7 @@ export default function GraphPage() {
 	const TypeIcon = (type: string) => TYPE_ICONS[type as keyof typeof TYPE_ICONS] || BookOpen;
 
 	return (
-		<div className="flex flex-col bg-zinc-50 dark:bg-black h-screen">
+		<div className="flex flex-col bg-zinc-50 dark:bg-black h-screen w-full overflow-hidden">
 			{/* Header */}
 			<header className="border-b bg-white dark:bg-zinc-950 px-4 sm:px-6 py-3 flex justify-between items-center shrink-0 z-20">
 				<div className="flex items-center gap-4 sm:gap-6">
@@ -706,6 +877,64 @@ export default function GraphPage() {
 								</div>
 							</div>
 
+							{/* Clusters */}
+							<div>
+								<button
+									onClick={() => setClustersExpanded((p) => !p)}
+									className="flex items-center justify-between w-full mb-2 group"
+								>
+									<h3 className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
+										<Layers className="h-3 w-3" />
+										Clusters {clusters.length > 0 && `(${clusters.length})`}
+									</h3>
+									<ChevronDown className={`h-3 w-3 text-zinc-400 transition-transform ${clustersExpanded ? "" : "-rotate-90"}`} />
+								</button>
+								{clustersExpanded && (
+									<div className="space-y-1.5 max-h-64 overflow-y-auto">
+										{clustersLoading ? (
+											<div className="flex items-center gap-2 py-2 text-zinc-400 text-xs">
+												<Loader2 className="h-3 w-3 animate-spin" />
+												Detecting clusters…
+											</div>
+										) : clusters.length === 0 ? (
+											<p className="text-[10px] text-zinc-400 py-1">No clusters found</p>
+										) : (
+											clusters.map((cluster) => (
+												<div
+													key={cluster.id}
+													className="rounded-lg border bg-zinc-50 dark:bg-zinc-900 p-2 space-y-1.5 hover:border-blue-300 dark:hover:border-blue-700 transition"
+													onMouseEnter={() => setHighlightCluster(new Set(cluster.paper_ids))}
+													onMouseLeave={() => setHighlightCluster(null)}
+												>
+													<div className="flex items-center justify-between">
+														<p className="text-xs font-medium truncate flex-1">{cluster.label}</p>
+														<Badge className="text-[9px] px-1.5 py-0 shrink-0 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">
+															{cluster.size}
+														</Badge>
+													</div>
+													<div className="flex flex-wrap gap-1">
+														{cluster.top_concepts.slice(0, 3).map((c, i) => (
+															<span key={i} className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+																{c}
+															</span>
+														))}
+													</div>
+													<Button
+														size="sm"
+														variant="ghost"
+														className="h-6 w-full text-[10px] text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950 gap-1"
+														onClick={() => handleSynthesizeCluster(cluster)}
+													>
+														<Sparkles className="h-3 w-3" />
+														Synthesize Cluster
+													</Button>
+												</div>
+											))
+										)}
+									</div>
+								)}
+							</div>
+
 							{/* Hidden Nodes */}
 							{hiddenNodes.size > 0 && (
 								<div>
@@ -780,7 +1009,7 @@ export default function GraphPage() {
 				)}
 
 				{/* ── Graph Canvas ── */}
-				<main ref={containerRef} className="flex-1 relative min-h-0 min-w-0">
+				<main ref={containerRef} className="flex-1 relative min-h-0 min-w-0 overflow-hidden">
 					{/* Toggle sidebar */}
 					<button
 						onClick={() => setSidebarOpen((p) => !p)}
@@ -792,6 +1021,21 @@ export default function GraphPage() {
 
 					{/* Graph controls — positioned to dodge the detail panel */}
 					<div className={`absolute top-3 z-30 flex items-center gap-1.5 transition-all ${selectedNode ? "right-[21rem]" : "right-3"}`}>
+						{/* Saved reports */}
+						<button
+							onClick={() => setReportsOpen(true)}
+							className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg border shadow-sm text-xs font-medium bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 border-zinc-200 dark:border-zinc-700 transition"
+							title="Saved reports"
+						>
+							<BookMarked className="h-3.5 w-3.5" />
+							Reports
+							{savedReports.length > 0 && (
+								<span className="absolute -top-1.5 -right-1.5 h-4 min-w-4 flex items-center justify-center rounded-full bg-blue-500 text-white text-[9px] font-bold px-1">
+									{savedReports.length}
+								</span>
+							)}
+						</button>
+
 						{/* Synthesize mode toggle */}
 						<button
 							onClick={toggleSelectMode}
@@ -813,8 +1057,11 @@ export default function GraphPage() {
 							<button onClick={handleZoomOut} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="Zoom out">
 								<ZoomOut className="h-4 w-4" />
 							</button>
-							<button onClick={handleReset} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-r-lg transition" title="Fit to view">
+							<button onClick={handleReset} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="Fit to view">
 								<Scan className="h-4 w-4" />
+							</button>
+							<button onClick={handleExportImage} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-r-lg transition" title="Export as PNG">
+								<Camera className="h-4 w-4" />
 							</button>
 						</div>
 					</div>
@@ -1266,6 +1513,15 @@ export default function GraphPage() {
 									{synthesisReport && (
 										<>
 											<button
+												onClick={handleSaveReport}
+												disabled={savingReport || reportSaved}
+												className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900 transition border disabled:opacity-50"
+												title="Save report"
+											>
+												{reportSaved ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : savingReport ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+												{reportSaved ? "Saved" : "Save"}
+											</button>
+											<button
 												onClick={handleCopyReport}
 												className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900 transition border"
 												title="Copy as Markdown"
@@ -1356,6 +1612,188 @@ export default function GraphPage() {
 					</div>
 				)}
 			</div>
+
+			{/* ── Saved Reports Drawer ── */}
+			{reportsOpen && (
+				<div className="fixed inset-0 z-50 flex justify-end">
+					<div
+						className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+						onClick={() => setReportsOpen(false)}
+					/>
+					<div className="relative w-full max-w-md bg-white dark:bg-zinc-950 h-full shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-right duration-300">
+						<div className="border-b px-6 py-4 flex items-center justify-between shrink-0">
+							<div className="flex items-center gap-3">
+								<div className="h-9 w-9 rounded-lg bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+									<BookMarked className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+								</div>
+								<div>
+									<h2 className="text-lg font-semibold">Saved Reports</h2>
+									<p className="text-xs text-zinc-500">{savedReports.length} report{savedReports.length !== 1 ? "s" : ""}</p>
+								</div>
+							</div>
+							<button
+								onClick={() => setReportsOpen(false)}
+								className="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900 transition"
+							>
+								<X className="h-4 w-4" />
+							</button>
+						</div>
+						<div className="flex-1 overflow-y-auto">
+							{savedReports.length === 0 ? (
+								<div className="flex flex-col items-center justify-center h-64 text-zinc-400 space-y-2">
+									<BookMarked className="h-10 w-10 opacity-30" />
+									<p className="text-sm">No saved reports yet</p>
+									<p className="text-xs text-center max-w-xs">Select papers and synthesize a report, then save it for later.</p>
+								</div>
+							) : (
+								<div className="p-4 space-y-2">
+									{savedReports.map((report) => (
+										<div
+											key={report.id}
+											className="rounded-lg border bg-zinc-50 dark:bg-zinc-900 p-3 hover:border-blue-300 dark:hover:border-blue-700 transition group"
+										>
+											<div className="flex items-start justify-between gap-2">
+												<button
+													onClick={() => { setViewingReport(report); setReportsOpen(false); }}
+													className="flex-1 text-left space-y-1"
+												>
+													<p className="text-sm font-medium line-clamp-2">{report.title}</p>
+													<div className="flex items-center gap-2 text-[10px] text-zinc-400">
+														<span className="flex items-center gap-1">
+															<Clock className="h-2.5 w-2.5" />
+															{new Date(report.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+														</span>
+														<span>{report.paper_count} papers</span>
+													</div>
+												</button>
+												<button
+													onClick={() => handleDeleteReport(report.id)}
+													className="p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950 opacity-0 group-hover:opacity-100 transition"
+													title="Delete report"
+												>
+													<Trash2 className="h-3.5 w-3.5 text-red-500" />
+												</button>
+											</div>
+										</div>
+									))}
+								</div>
+							)}
+						</div>
+					</div>
+				</div>
+			)}
+
+			{/* ── Viewing a Saved Report ── */}
+			{viewingReport && (
+				<div className="fixed inset-0 z-50 flex justify-end">
+					<div
+						className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+						onClick={() => setViewingReport(null)}
+					/>
+					<div className="relative w-full max-w-2xl bg-white dark:bg-zinc-950 h-full shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-right duration-300">
+						<div className="border-b px-6 py-4 flex items-center justify-between shrink-0">
+							<div className="flex items-center gap-3">
+								<div className="h-9 w-9 rounded-lg bg-amber-100 dark:bg-amber-900 flex items-center justify-center">
+									<FileText className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+								</div>
+								<div>
+									<h2 className="text-lg font-semibold line-clamp-1">{viewingReport.title}</h2>
+									<p className="text-xs text-zinc-500">
+										{viewingReport.paper_count} papers ·{" "}
+										{new Date(viewingReport.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+									</p>
+								</div>
+							</div>
+							<div className="flex items-center gap-1.5">
+								<button
+									onClick={() => {
+										navigator.clipboard.writeText(viewingReport.markdown);
+										setCopied(true);
+										setTimeout(() => setCopied(false), 2000);
+									}}
+									className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900 transition border"
+								>
+									{copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+									{copied ? "Copied" : "Copy"}
+								</button>
+								<button
+									onClick={() => {
+										const blob = new Blob([viewingReport.markdown], { type: "text/markdown" });
+										const url = URL.createObjectURL(blob);
+										const a = document.createElement("a");
+										a.href = url;
+										a.download = `${viewingReport.title.replace(/[^a-zA-Z0-9 ]/g, "").replace(/\s+/g, "-").toLowerCase()}.md`;
+										a.click();
+										URL.revokeObjectURL(url);
+									}}
+									className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900 transition border"
+									title="Download as .md file"
+								>
+									<Download className="h-3.5 w-3.5" />
+									Download
+								</button>
+								{savedReports.some((r) => r.id === viewingReport.id) ? (
+									<button
+										onClick={() => handleDeleteReport(viewingReport.id)}
+										className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900 transition border"
+										title="Remove from saved reports"
+									>
+										<BookMarked className="h-3.5 w-3.5" />
+										Unsave
+									</button>
+								) : (
+									<button
+										onClick={handleResaveReport}
+										disabled={savingReport}
+										className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900 transition border disabled:opacity-50"
+										title="Save report"
+									>
+										{savingReport ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+										Save
+									</button>
+								)}
+								<button
+									onClick={() => setViewingReport(null)}
+									className="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900 transition"
+								>
+									<X className="h-4 w-4" />
+								</button>
+							</div>
+						</div>
+						<div className="flex-1 overflow-y-auto p-6">
+							<article className="prose prose-zinc dark:prose-invert prose-sm max-w-none prose-headings:text-base prose-headings:font-semibold prose-p:leading-relaxed prose-li:leading-relaxed prose-pre:bg-transparent prose-pre:p-0">
+								<ReactMarkdown
+									components={{
+										code({ className, children, ...props }) {
+											const match = /language-(\w+)/.exec(className || "");
+											const codeStr = String(children).replace(/\n$/, "");
+											if (match?.[1] === "mermaid") {
+												return <MermaidRenderer code={codeStr} />;
+											}
+											if (!match) {
+												return (
+													<code className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-xs font-mono" {...props}>
+														{children}
+													</code>
+												);
+											}
+											return (
+												<pre className="rounded-lg border bg-zinc-50 dark:bg-zinc-900 p-4 overflow-x-auto">
+													<code className={`${className} text-xs font-mono`} {...props}>
+														{children}
+													</code>
+												</pre>
+											);
+										},
+									}}
+								>
+									{viewingReport.markdown}
+								</ReactMarkdown>
+							</article>
+						</div>
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }
