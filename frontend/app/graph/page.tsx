@@ -372,7 +372,6 @@ function GraphPageContent() {
 		setDetailsLoading(false);
 	}, []);
 
-	/* Deep-link: auto-focus a paper from ?paper=<arxiv_id> */
 	useEffect(() => {
 		if (loading || deepLinkHandled.current) return;
 		const paperId = searchParams.get("paper");
