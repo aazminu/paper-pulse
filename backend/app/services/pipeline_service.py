@@ -24,6 +24,7 @@ PDF: Full-text extraction for ArXiv papers via PyMuPDF
 import json
 import logging
 import time
+from datetime import datetime, timezone
 from app.database import supabase
 from app.services.arxiv_service import fetch_daily_papers as fetch_arxiv
 from app.services.semantic_scholar_service import fetch_recent_papers as fetch_s2
@@ -43,6 +44,7 @@ logger = logging.getLogger("pipeline")
 PER_SOURCE_LIMIT = 30
 EMBEDDING_BATCH_SIZE = 64
 TOP_MATCHES_PER_USER = 25
+QUERY_REFRESH_DAYS = 7
 
 
 def _deduplicate_papers(paper_lists: list[list[dict]]) -> list[dict]:
@@ -104,6 +106,7 @@ def run_single_user_pipeline(user_id: str):
 
     if not optimized or not optimized.get("search_queries"):
         optimized = optimize_user_interests(interest_text, domains)
+        optimized["generated_at"] = datetime.now(timezone.utc).isoformat()
         try:
             supabase.table("users").update({
                 "optimized_queries": json.dumps(optimized)
@@ -121,11 +124,14 @@ def run_single_user_pipeline(user_id: str):
 
     arxiv, s2, pubmed, openalex = [], [], [], []
 
+    BOOTSTRAP_DAYS_BACK = 30
+
     try:
         arxiv = fetch_arxiv(
             domains, max_results=PER_SOURCE_LIMIT,
             search_queries=search_queries or None,
             arxiv_categories=arxiv_categories or None,
+            days_back=BOOTSTRAP_DAYS_BACK,
         )
     except Exception as e:
         logger.error("[ArXiv] Fetch error: %s", e)
@@ -134,6 +140,7 @@ def run_single_user_pipeline(user_id: str):
         s2 = fetch_s2(
             domains, max_results=PER_SOURCE_LIMIT,
             search_queries=search_queries or None,
+            days_back=BOOTSTRAP_DAYS_BACK,
         )
     except Exception as e:
         logger.error("[S2] Fetch error: %s", e)
@@ -142,6 +149,7 @@ def run_single_user_pipeline(user_id: str):
         pubmed = fetch_pubmed(
             domains, max_results=PER_SOURCE_LIMIT,
             search_queries=search_queries or None,
+            days_back=BOOTSTRAP_DAYS_BACK,
         )
     except Exception as e:
         logger.error("[PubMed] Fetch error: %s", e)
@@ -150,6 +158,7 @@ def run_single_user_pipeline(user_id: str):
         openalex = fetch_openalex(
             domains, max_results=PER_SOURCE_LIMIT,
             search_queries=search_queries or None,
+            days_back=BOOTSTRAP_DAYS_BACK,
         )
     except Exception as e:
         logger.error("[OpenAlex] Fetch error: %s", e)
@@ -275,8 +284,20 @@ def run_single_user_pipeline(user_id: str):
     if not rerank_query:
         rerank_query = interest_text or "recent research"
 
-    user_pool = list(processed_papers.values())
-    logger.info("Reranking %d papers -> top %d", len(user_pool), TOP_MATCHES_PER_USER)
+    existing_feed = (
+        supabase.table("feed_items")
+        .select("paper_id")
+        .eq("user_id", user_id)
+        .execute()
+    )
+    existing_paper_ids = {r["paper_id"] for r in (existing_feed.data or [])}
+
+    user_pool = [
+        p for p in processed_papers.values()
+        if p["arxiv_id"] not in existing_paper_ids
+    ]
+    logger.info("Reranking %d papers -> top %d (excluded %d already in feed)",
+                len(user_pool), TOP_MATCHES_PER_USER, len(existing_paper_ids))
 
     if len(user_pool) > TOP_MATCHES_PER_USER:
         reranked = rerank_papers(
@@ -367,9 +388,23 @@ def run_daily_pipeline():
         else:
             optimized = None
 
-        if not optimized or not optimized.get("search_queries"):
-            logger.info("User %s... - no cached queries, generating now...", user_id[:8])
+        queries_stale = False
+        if optimized and optimized.get("search_queries"):
+            generated_at = optimized.get("generated_at")
+            if generated_at:
+                try:
+                    age = datetime.now(timezone.utc) - datetime.fromisoformat(generated_at)
+                    queries_stale = age.days >= QUERY_REFRESH_DAYS
+                except (ValueError, TypeError):
+                    queries_stale = True
+            else:
+                queries_stale = True
+
+        if not optimized or not optimized.get("search_queries") or queries_stale:
+            reason = "stale" if queries_stale else "missing"
+            logger.info("User %s... - queries %s, regenerating...", user_id[:8], reason)
             optimized = optimize_user_interests(interest_text, domains)
+            optimized["generated_at"] = datetime.now(timezone.utc).isoformat()
             try:
                 supabase.table("users").update({
                     "optimized_queries": json.dumps(optimized)
@@ -589,14 +624,22 @@ def run_daily_pipeline():
         if not rerank_query:
             rerank_query = interest_text or "recent research"
 
+        existing_feed = (
+            supabase.table("feed_items")
+            .select("paper_id")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        already_fed = {r["paper_id"] for r in (existing_feed.data or [])}
+
         user_pool = [
             processed_papers[pid]
             for pid in paper_ids_for_user
-            if pid in processed_papers
+            if pid in processed_papers and pid not in already_fed
         ]
 
-        logger.info("User %s... - %d papers -> Cohere rerank -> top %d",
-                     user_id[:8], len(user_pool), TOP_MATCHES_PER_USER)
+        logger.info("User %s... - %d papers -> Cohere rerank -> top %d (excluded %d already in feed)",
+                     user_id[:8], len(user_pool), TOP_MATCHES_PER_USER, len(already_fed))
 
         if len(user_pool) > TOP_MATCHES_PER_USER:
             reranked = rerank_papers(

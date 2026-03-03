@@ -153,7 +153,7 @@ def fetch_recent_papers(
 
     end_date = date.today()
     start_date = end_date - timedelta(days=days_back)
-    year_filter = f"{start_date.year}-{end_date.year}"
+    date_filter = f"{start_date.isoformat()}:{end_date.isoformat()}"
 
     query_pairs: list[tuple[str, str]] = []
     if search_queries:
@@ -177,7 +177,7 @@ def fetch_recent_papers(
             "fields": S2_FIELDS,
             "limit": batch_limit,
             "offset": 0,
-            "year": year_filter,
+            "publicationDateOrYear": date_filter,
             "fieldsOfStudy": field_of_study,
         }
 

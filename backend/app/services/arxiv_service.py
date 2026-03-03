@@ -2,7 +2,7 @@ import logging
 import urllib.request
 import urllib.parse
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from typing import List
 import time
 
@@ -19,13 +19,13 @@ def fetch_daily_papers(
     max_results: int = 30,
     search_queries: List[str] | None = None,
     arxiv_categories: List[str] | None = None,
+    days_back: int = 3,
 ) -> List[dict]:
     """
     Fetches papers from ArXiv.
 
     When search_queries are provided (from the LLM optimizer), uses them as
-    keyword search terms combined with category filters. ArXiv sorts by
-    relevance when keywords are present, so we only need the top results.
+    keyword search terms combined with category filters and a date window.
 
     When no search_queries are given, falls back to broad category search
     sorted by submission date.
@@ -46,7 +46,7 @@ def fetch_daily_papers(
     cat_part = "+OR+".join(category_queries)
 
     if search_queries:
-        return _fetch_with_queries(cat_part, search_queries, max_results)
+        return _fetch_with_queries(cat_part, search_queries, max_results, days_back)
 
     return _fetch_by_category(cat_part, max_results)
 
@@ -55,15 +55,20 @@ def _fetch_with_queries(
     cat_part: str,
     search_queries: List[str],
     max_results: int,
+    days_back: int = 3,
 ) -> List[dict]:
-    """Run each optimized search query against ArXiv, merge results."""
+    """Run each optimized search query against ArXiv, scoped to recent papers."""
     papers = []
     seen_ids: set = set()
     per_query = max(10, max_results // len(search_queries))
 
+    end = date.today()
+    start = end - timedelta(days=days_back)
+    date_range = f"submittedDate:[{start.strftime('%Y%m%d')}0000+TO+{end.strftime('%Y%m%d')}2359]"
+
     for query_text in search_queries:
         encoded_q = urllib.parse.quote(query_text)
-        search_query = f"({cat_part})+AND+all:{encoded_q}"
+        search_query = f"({cat_part})+AND+all:{encoded_q}+AND+{date_range}"
 
         url = (
             f"http://export.arxiv.org/api/query?"
