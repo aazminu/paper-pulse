@@ -11,6 +11,7 @@ Runs after the main daily pipeline to populate the Neo4j knowledge graph:
 Designed to be idempotent - safe to re-run on existing data.
 """
 
+import logging
 import json
 import urllib.request
 import time
@@ -31,6 +32,8 @@ from app.services.entity_extraction_service import batch_extract_entities
 from app.services.citation_service import batch_fetch_citations
 
 load_dotenv()
+
+logger = logging.getLogger("graph_pipeline")
 
 OPENALEX_MAILTO = os.getenv("OPENALEX_MAILTO", "")
 
@@ -77,7 +80,7 @@ def fetch_openalex_affiliations(papers: list[dict]) -> list[dict]:
 
             time.sleep(0.3)  # Rate limit
         except Exception as e:
-            print(f"    [OpenAlex] Affiliation fetch error for DOI {doi}: {e}")
+            logger.warning("OpenAlex affiliation fetch error for DOI %s: %s", doi, e)
             continue
 
     return affiliations
@@ -92,9 +95,9 @@ def run_graph_pipeline(paper_ids: list[str] | None = None):
                    papers that haven't been graphed yet (tracked via
                    'graph_processed' flag in Supabase).
     """
-    print("\n" + "=" * 60)
-    print("Starting Knowledge Graph Pipeline")
-    print("=" * 60)
+    logger.info("="*60)
+    logger.info("Starting Knowledge Graph Pipeline")
+    logger.info("="*60)
 
     init_schema()
 
@@ -111,23 +114,23 @@ def run_graph_pipeline(paper_ids: list[str] | None = None):
     response = query.execute()
     papers = response.data
     if not papers:
-        print("No papers to process for graph pipeline.")
+        logger.info("No papers to process for graph pipeline.")
         return {"status": "success", "papers_processed": 0}
 
-    print(f"Processing {len(papers)} papers for knowledge graph")
+    logger.info("Processing %d papers for knowledge graph", len(papers))
 
-    print("\n--- Step 1: Upserting paper nodes ---")
+    logger.info("--- Step 1: Upserting paper nodes ---")
     upsert_papers_batch(papers)
-    print(f"  Upserted {len(papers)} paper nodes")
+    logger.info("  Upserted %d paper nodes", len(papers))
 
-    print("\n--- Step 2: Creating author relationships ---")
+    logger.info("--- Step 2: Creating author relationships ---")
     for paper in papers:
         authors = paper.get("authors", [])
         if authors:
             upsert_authors_for_paper(paper["arxiv_id"], authors)
-    print(f"  Processed authors for {len(papers)} papers")
+    logger.info("  Processed authors for %d papers", len(papers))
 
-    print("\n--- Step 3: Extracting concepts via LLM ---")
+    logger.info("--- Step 3: Extracting concepts via LLM ---")
     entities_map = batch_extract_entities(papers)
 
     concept_count = 0
@@ -146,9 +149,9 @@ def run_graph_pipeline(paper_ids: list[str] | None = None):
             all_affiliations.extend(affiliations)
             affiliation_count += len(affiliations)
 
-    print(f"  Extracted {concept_count} concepts across {len(entities_map)} papers")
+    logger.info("  Extracted %d concepts across %d papers", concept_count, len(entities_map))
 
-    print("\n--- Step 4: Fetching citation data ---")
+    logger.info("--- Step 4: Fetching citation data ---")
     citation_papers = papers[:MAX_CITATION_FETCHES]
     citation_map = batch_fetch_citations(citation_papers)
 
@@ -166,9 +169,9 @@ def run_graph_pipeline(paper_ids: list[str] | None = None):
                 add_citations(citing_id, [pid])
             citation_edges += len(cites)
 
-    print(f"  Created {citation_edges} citation edges")
+    logger.info("  Created %d citation edges", citation_edges)
 
-    print("\n--- Step 5: Fetching institution affiliations ---")
+    logger.info("--- Step 5: Fetching institution affiliations ---")
     papers_with_dois = [p for p in papers if p.get("doi")]
     if papers_with_dois:
         openalex_affiliations = fetch_openalex_affiliations(papers_with_dois[:20])
@@ -177,23 +180,20 @@ def run_graph_pipeline(paper_ids: list[str] | None = None):
     if all_affiliations:
         upsert_institutions_batch(all_affiliations)
 
-    print(f"  Stored {len(all_affiliations)} author-institution affiliations")
+    logger.info("  Stored %d author-institution affiliations", len(all_affiliations))
 
     stats = get_graph_stats()
-    print(f"\n{'=' * 60}")
-    print("Knowledge Graph Pipeline Complete!")
-    print(f"  Papers processed this run: {len(papers)}")
-    print(f"  Concepts extracted: {concept_count}")
-    print(f"  Citation edges: {citation_edges}")
-    print(f"  Affiliations: {len(all_affiliations)}")
-    print(f"\n  Graph totals:")
-    print(f"    Papers:      {stats.get('papers', 0)}")
-    print(f"    Authors:     {stats.get('authors', 0)}")
-    print(f"    Concepts:    {stats.get('concepts', 0)}")
-    print(f"    Institutions:{stats.get('institutions', 0)}")
-    print(f"    Citations:   {stats.get('citations', 0)}")
-    print(f"    Authorships: {stats.get('authorships', 0)}")
-    print(f"{'=' * 60}")
+    logger.info("="*60)
+    logger.info("Knowledge Graph Pipeline Complete!")
+    logger.info("  Papers processed: %d", len(papers))
+    logger.info("  Concepts extracted: %d", concept_count)
+    logger.info("  Citation edges: %d", citation_edges)
+    logger.info("  Affiliations: %d", len(all_affiliations))
+    logger.info("  Graph totals: Papers=%d Authors=%d Concepts=%d Institutions=%d Citations=%d Authorships=%d",
+                stats.get('papers', 0), stats.get('authors', 0),
+                stats.get('concepts', 0), stats.get('institutions', 0),
+                stats.get('citations', 0), stats.get('authorships', 0))
+    logger.info("="*60)
 
     return {
         "status": "success",

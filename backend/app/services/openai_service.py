@@ -1,9 +1,12 @@
 import os
+import logging
 import tiktoken
 from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger("openai_service")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
@@ -35,7 +38,7 @@ def get_embedding(text: str) -> list[float]:
         )
         return response.data[0].embedding
     except Exception as e:
-        print(f"Error generating embedding: {e}")
+        logger.error("Error generating embedding: %s", e)
         return []
 
 
@@ -56,7 +59,7 @@ def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
         sorted_data = sorted(response.data, key=lambda d: d.index)
         return [d.embedding for d in sorted_data]
     except Exception as e:
-        print(f"Error batch-embedding: {e}")
+        logger.error("Error batch-embedding %d texts: %s", len(texts), e)
         return [[] for _ in texts]
 
 
@@ -86,7 +89,7 @@ def generate_paper_summary(abstract: str) -> str:
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        print(f"Error generating summary: {e}")
+        logger.error("Error generating summary: %s", e)
         return "Summary could not be generated."
 
 
@@ -156,7 +159,7 @@ def generate_chat_title(first_message: str) -> str:
         title = response.choices[0].message.content.strip().strip('"\'')
         return title[:80] if title else "New Chat"
     except Exception as e:
-        print(f"Error generating chat title: {e}")
+        logger.error("Error generating chat title: %s", e)
         return first_message[:50].strip() or "New Chat"
 
 
@@ -340,7 +343,7 @@ def answer_question_with_context(
         )
         return {"answer": response.choices[0].message.content.strip(), "sources": context_papers}
     except Exception as e:
-        print(f"Error generating answer: {e}")
+        logger.error("Error generating answer: %s", e)
         return {"answer": "Sorry, I encountered an error while analyzing your papers.", "sources": []}
 
 
@@ -380,7 +383,7 @@ def stream_answer_with_context(
             if delta and delta.content:
                 yield delta.content
     except Exception as e:
-        print(f"Error in streaming answer: {e}")
+        logger.error("Error in streaming answer: %s", e)
         yield "Sorry, I encountered an error while analyzing your papers."
 
 
@@ -448,7 +451,7 @@ def stream_answer_multimodal(
             if delta and delta.content:
                 yield delta.content
     except Exception as e:
-        print(f"Error in multimodal streaming: {e}")
+        logger.error("Error in multimodal streaming: %s", e)
         yield "Sorry, I encountered an error while analyzing your files."
 
 
@@ -519,7 +522,7 @@ def answer_question_multimodal(
         )
         return {"answer": response.choices[0].message.content.strip(), "sources": context_papers}
     except Exception as e:
-        print(f"Error in multimodal answer: {e}")
+        logger.error("Error in multimodal answer: %s", e)
         return {"answer": "Sorry, I encountered an error while analyzing your files.", "sources": []}
 
 
@@ -614,7 +617,7 @@ def synthesize_literature_review(subgraph: dict) -> str:
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        print(f"Error synthesizing literature review: {e}")
+        logger.error("Error synthesizing literature review: %s", e)
         return "Sorry, I encountered an error while generating the literature review."
 
 
@@ -804,7 +807,7 @@ def synthesize_publication_review(subgraph: dict) -> dict:
             "citation_count": len(citations),
         }
     except Exception as e:
-        print(f"Error synthesizing publication review: {e}")
+        logger.error("Error synthesizing publication review: %s", e)
         return {
             "markdown": "Sorry, I encountered an error while generating the review.",
             "bibtex": bibtex_str,

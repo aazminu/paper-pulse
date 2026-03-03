@@ -12,6 +12,7 @@ Usage:
   full_text = extract_arxiv_full_text("2401.12345")
 """
 
+import logging
 import io
 import os
 import re
@@ -21,6 +22,8 @@ import urllib.request
 from typing import Optional
 
 import fitz  # type: ignore[import-untyped]  # PyMuPDF
+
+logger = logging.getLogger("pdf")
 
 
 ARXIV_PDF_BASE = "https://arxiv.org/pdf/{arxiv_id}.pdf"
@@ -47,7 +50,7 @@ def extract_arxiv_full_text(arxiv_id: str) -> Optional[str]:
         with urllib.request.urlopen(req, timeout=PDF_DOWNLOAD_TIMEOUT) as response:
             pdf_bytes = response.read()
     except Exception as e:
-        print(f"  [PDF] Failed to download {arxiv_id}: {e}")
+        logger.warning("Failed to download %s: %s", arxiv_id, e)
         return None
 
     try:
@@ -57,7 +60,7 @@ def extract_arxiv_full_text(arxiv_id: str) -> Optional[str]:
             return cleaned[:MAX_TEXT_CHARS] if cleaned else None
         return None
     except Exception as e:
-        print(f"  [PDF] Failed to extract text from {arxiv_id}: {e}")
+        logger.warning("Failed to extract text from %s: %s", arxiv_id, e)
         return None
 
 
@@ -72,7 +75,7 @@ def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> Optional[str]:
             return cleaned[:MAX_TEXT_CHARS] if cleaned else None
         return None
     except Exception as e:
-        print(f"  [PDF] Extraction error: {e}")
+        logger.warning("PDF extraction error: %s", e)
         return None
 
 
@@ -132,12 +135,12 @@ def batch_extract_arxiv(
     results: dict[str, Optional[str]] = {}
 
     for i, arxiv_id in enumerate(arxiv_ids):
-        print(f"  [PDF] Extracting {arxiv_id} ({i + 1}/{len(arxiv_ids)})...")
+        logger.info("Extracting %s (%d/%d)", arxiv_id, i + 1, len(arxiv_ids))
         results[arxiv_id] = extract_arxiv_full_text(arxiv_id)
 
         if i < len(arxiv_ids) - 1:
             time.sleep(rate_limit)
 
     succeeded = sum(1 for v in results.values() if v is not None)
-    print(f"  [PDF] Extracted {succeeded}/{len(arxiv_ids)} papers successfully")
+    logger.info("Extracted %d/%d papers successfully", succeeded, len(arxiv_ids))
     return results

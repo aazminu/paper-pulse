@@ -22,6 +22,8 @@ PDF: Full-text extraction for ArXiv papers via PyMuPDF
 """
 
 import json
+import logging
+import time
 from app.database import supabase
 from app.services.arxiv_service import fetch_daily_papers as fetch_arxiv
 from app.services.semantic_scholar_service import fetch_recent_papers as fetch_s2
@@ -35,6 +37,8 @@ from app.services.rerank_service import rerank_papers
 from app.services.pdf_service import batch_extract_arxiv
 from app.services.query_optimizer import optimize_user_interests
 from app.services.chunking_service import batch_chunk_papers
+
+logger = logging.getLogger("pipeline")
 
 PER_SOURCE_LIMIT = 30         # Papers per source per user 
 EMBEDDING_BATCH_SIZE = 64     # Papers to embed in one API call
@@ -72,13 +76,13 @@ def run_single_user_pipeline(user_id: str):
     Fetches papers, embeds, summarizes, reranks, and populates their feed.
     Called right after onboarding so the user sees content immediately.
     """
-    print(f"\n{'=' * 60}")
-    print(f"Bootstrapping feed for user {user_id[:8]}...")
-    print(f"{'=' * 60}")
+    logger.info("=" * 60)
+    logger.info("Bootstrapping feed for user %s...", user_id[:8])
+    logger.info("=" * 60)
 
     user_resp = supabase.table("users").select("*").eq("id", user_id).execute()
     if not user_resp.data:
-        print(f"  User {user_id} not found, aborting.")
+        logger.warning("User %s not found, aborting.", user_id[:8])
         return
 
     user = user_resp.data[0]
@@ -86,7 +90,7 @@ def run_single_user_pipeline(user_id: str):
     interest_text = user.get("interest_text", "") or ""
 
     if not domains:
-        print(f"  No domains selected, aborting.")
+        logger.warning("User %s has no domains selected, aborting.", user_id[:8])
         return
 
     optimized_raw = user.get("optimized_queries")
@@ -105,15 +109,15 @@ def run_single_user_pipeline(user_id: str):
                 "optimized_queries": json.dumps(optimized)
             }).eq("id", user_id).execute()
         except Exception as e:
-            print(f"  Failed to cache optimized queries: {e}")
+            logger.error("Failed to cache optimized queries: %s", e)
 
     search_queries = optimized.get("search_queries", [])
     keywords = optimized.get("keywords", [])
     arxiv_categories = optimized.get("arxiv_categories", [])
     rerank_query = " ".join(search_queries) if search_queries else interest_text
 
-    print(f"  domains={domains}")
-    print(f"  queries: {search_queries}")
+    logger.info("  domains=%s, queries=%d, categories=%d",
+                domains, len(search_queries), len(arxiv_categories))
 
     arxiv, s2, pubmed, openalex = [], [], [], []
 
@@ -124,7 +128,7 @@ def run_single_user_pipeline(user_id: str):
             arxiv_categories=arxiv_categories or None,
         )
     except Exception as e:
-        print(f"  [ArXiv] Error: {e}")
+        logger.error("[ArXiv] Fetch error: %s", e)
 
     try:
         s2 = fetch_s2(
@@ -132,7 +136,7 @@ def run_single_user_pipeline(user_id: str):
             search_queries=search_queries or None,
         )
     except Exception as e:
-        print(f"  [S2] Error: {e}")
+        logger.error("[S2] Fetch error: %s", e)
 
     try:
         pubmed = fetch_pubmed(
@@ -140,7 +144,7 @@ def run_single_user_pipeline(user_id: str):
             search_queries=search_queries or None,
         )
     except Exception as e:
-        print(f"  [PubMed] Error: {e}")
+        logger.error("[PubMed] Fetch error: %s", e)
 
     try:
         openalex = fetch_openalex(
@@ -148,14 +152,14 @@ def run_single_user_pipeline(user_id: str):
             search_queries=search_queries or None,
         )
     except Exception as e:
-        print(f"  [OpenAlex] Error: {e}")
+        logger.error("[OpenAlex] Fetch error: %s", e)
 
     all_papers = _deduplicate_papers([arxiv, s2, pubmed, openalex])
-    print(f"  Fetched {len(all_papers)} unique papers "
-          f"(ArXiv={len(arxiv)}, S2={len(s2)}, PubMed={len(pubmed)}, OpenAlex={len(openalex)})")
+    logger.info("Fetched %d unique papers (ArXiv=%d, S2=%d, PubMed=%d, OpenAlex=%d)",
+                len(all_papers), len(arxiv), len(s2), len(pubmed), len(openalex))
 
     if not all_papers:
-        print("  No papers found, aborting.")
+        logger.warning("No papers found for user %s, aborting.", user_id[:8])
         return
 
     processed_papers: dict[str, dict] = {}
@@ -184,7 +188,8 @@ def run_single_user_pipeline(user_id: str):
         processed_papers[pid] = paper_record
         papers_to_embed.append((pid, paper_record))
 
-    print(f"  New papers to embed: {len(papers_to_embed)}")
+    logger.info("New papers to embed: %d (skipped %d existing)",
+                len(papers_to_embed), len(all_papers) - len(papers_to_embed))
 
     arxiv_papers_to_extract = [
         (pid, rec) for pid, rec in papers_to_embed
@@ -192,33 +197,41 @@ def run_single_user_pipeline(user_id: str):
     ]
     full_texts: dict[str, str | None] = {}
     if arxiv_papers_to_extract:
-        print(f"  Extracting full text from {len(arxiv_papers_to_extract)} ArXiv PDFs...")
+        logger.info("Extracting full text from %d ArXiv PDFs...", len(arxiv_papers_to_extract))
         ids_to_extract = [pid for pid, _ in arxiv_papers_to_extract]
         full_texts = batch_extract_arxiv(ids_to_extract, rate_limit=1.0)
 
     if papers_to_embed:
-        for batch_start in range(0, len(papers_to_embed), EMBEDDING_BATCH_SIZE):
+        total_papers = len(papers_to_embed)
+        for batch_start in range(0, total_papers, EMBEDDING_BATCH_SIZE):
             batch = papers_to_embed[batch_start : batch_start + EMBEDDING_BATCH_SIZE]
             texts = [f"{p['title']}. {p['abstract']}" for _, p in batch]
 
-            print(f"  Embedding batch {batch_start // EMBEDDING_BATCH_SIZE + 1} "
-                  f"({len(batch)} papers)...")
+            logger.info("Embedding batch %d (%d papers)...",
+                        batch_start // EMBEDDING_BATCH_SIZE + 1, len(batch))
+            embed_start = time.time()
             vectors = get_embeddings_batch(texts)
+            logger.info("  Embedding completed in %.1fs", time.time() - embed_start)
 
-            for (pid, paper_record), vector in zip(batch, vectors):
+            for idx, ((pid, paper_record), vector) in enumerate(zip(batch, vectors)):
                 paper_record["abstract_vector"] = vector
 
                 ft = full_texts.get(pid)
                 if ft:
                     paper_record["full_text"] = ft
 
+                paper_num = batch_start + idx + 1
+                logger.info("  Summarizing paper %d/%d: %s",
+                            paper_num, total_papers, paper_record["title"][:80])
+                summ_start = time.time()
                 summary = generate_paper_summary(paper_record["abstract"])
                 paper_record["summary"] = summary
+                logger.debug("    Summary generated in %.1fs", time.time() - summ_start)
 
                 try:
                     supabase.table("papers").insert(paper_record).execute()
                 except Exception as db_err:
-                    print(f"  DB insert error for {pid}: {db_err}")
+                    logger.error("DB insert error for paper %s: %s", pid[:20], db_err)
 
                 processed_papers[pid] = paper_record
 
@@ -228,12 +241,17 @@ def run_single_user_pipeline(user_id: str):
         if processed_papers.get(pid, {}).get("full_text")
     ]
     if papers_with_text:
-        print(f"  Chunking {len(papers_with_text)} full-text papers...")
+        logger.info("Chunking %d full-text papers...", len(papers_with_text))
         all_chunks = batch_chunk_papers(papers_with_text)
         if all_chunks:
+            logger.info("Generated %d chunks, embedding...", len(all_chunks))
             for batch_start in range(0, len(all_chunks), EMBEDDING_BATCH_SIZE):
                 batch = all_chunks[batch_start : batch_start + EMBEDDING_BATCH_SIZE]
                 chunk_texts = [c["chunk_text"] for c in batch]
+                logger.info("  Embedding chunk batch %d/%d (%d chunks)...",
+                            batch_start // EMBEDDING_BATCH_SIZE + 1,
+                            (len(all_chunks) + EMBEDDING_BATCH_SIZE - 1) // EMBEDDING_BATCH_SIZE,
+                            len(batch))
                 chunk_vectors = get_embeddings_batch(chunk_texts)
 
                 for chunk, vector in zip(batch, chunk_vectors):
@@ -249,16 +267,16 @@ def run_single_user_pipeline(user_id: str):
                             break
                         except Exception as chunk_err:
                             if attempt < 2:
-                                import time as _t
-                                _t.sleep(2 * (attempt + 1))
+                                time.sleep(2 * (attempt + 1))
                             else:
-                                print(f"    Chunk insert failed: {chunk_err}")
+                                logger.error("Chunk insert failed after 3 attempts: %s", chunk_err)
+            logger.info("Stored %d chunks in paper_chunks table", len(all_chunks))
 
     if not rerank_query:
         rerank_query = interest_text or "recent research"
 
     user_pool = list(processed_papers.values())
-    print(f"  Reranking {len(user_pool)} papers -> top {TOP_MATCHES_PER_USER}")
+    logger.info("Reranking %d papers -> top %d", len(user_pool), TOP_MATCHES_PER_USER)
 
     if len(user_pool) > TOP_MATCHES_PER_USER:
         reranked = rerank_papers(
@@ -291,9 +309,9 @@ def run_single_user_pipeline(user_id: str):
         if new_ids:
             run_graph_pipeline(paper_ids=new_ids)
     except Exception as e:
-        print(f"  [Graph Pipeline] Error (non-fatal): {e}")
+        logger.error("[Graph Pipeline] Error (non-fatal): %s", e)
 
-    print(f"  Bootstrap complete! {feed_items} feed items created.")
+    logger.info("Bootstrap complete for user %s! %d feed items created.", user_id[:8], feed_items)
     return {"status": "success", "feed_items_created": feed_items}
 
 
@@ -305,17 +323,17 @@ def run_daily_pipeline():
       3. Global dedup -> ArXiv PDF extract -> batch embed -> summarize
       4. For each user -> Cohere rerank -> save top 25 to feed
     """
-    print("=" * 60)
-    print("Starting PaperPulse Daily Pipeline (LLM-Optimized Queries)")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("Starting PaperPulse Daily Pipeline (LLM-Optimized Queries)")
+    logger.info("=" * 60)
 
     users_response = supabase.table("users").select("*").execute()
     users = users_response.data
     if not users:
-        print("No users found. Exiting.")
+        logger.info("No users found. Exiting.")
         return {"status": "success", "message": "No users to process"}
 
-    print(f"Processing {len(users)} user(s)")
+    logger.info("Processing %d user(s)", len(users))
 
     user_paper_ids: dict[str, set[str]] = {}
     all_raw_papers: list[dict] = []
@@ -328,7 +346,7 @@ def run_daily_pipeline():
         user_paper_ids[user_id] = set()
 
         if not domains:
-            print(f"  User {user_id[:8]}... - no domains, skipping fetch")
+            logger.info("User %s... - no domains, skipping fetch", user_id[:8])
             continue
 
         optimized_raw = user.get("optimized_queries")
@@ -341,22 +359,21 @@ def run_daily_pipeline():
             optimized = None
 
         if not optimized or not optimized.get("search_queries"):
-            print(f"  User {user_id[:8]}... - no cached queries, generating now...")
+            logger.info("User %s... - no cached queries, generating now...", user_id[:8])
             optimized = optimize_user_interests(interest_text, domains)
             try:
                 supabase.table("users").update({
                     "optimized_queries": json.dumps(optimized)
                 }).eq("id", user_id).execute()
             except Exception as e:
-                print(f"    Failed to cache optimized queries: {e}")
+                logger.error("Failed to cache optimized queries for user %s: %s", user_id[:8], e)
 
         search_queries = optimized.get("search_queries", [])
         keywords = optimized.get("keywords", [])
         arxiv_categories = optimized.get("arxiv_categories", [])
 
-        print(f"\n  User {user_id[:8]}... - domains={domains}")
-        print(f"    queries: {search_queries}")
-        print(f"    keywords: {keywords}")
+        logger.info("User %s... - domains=%s, queries=%d",
+                    user_id[:8], domains, len(search_queries))
 
         rerank_query = " ".join(search_queries) if search_queries else interest_text
 
@@ -368,7 +385,7 @@ def run_daily_pipeline():
             )
             source_counts["arxiv"] += len(arxiv)
         except Exception as e:
-            print(f"    [ArXiv] Error: {e}")
+            logger.error("[ArXiv] Fetch error for user %s: %s", user_id[:8], e)
             arxiv = []
 
         try:
@@ -378,7 +395,7 @@ def run_daily_pipeline():
             )
             source_counts["semantic_scholar"] += len(s2)
         except Exception as e:
-            print(f"    [S2] Error: {e}")
+            logger.error("[S2] Fetch error for user %s: %s", user_id[:8], e)
             s2 = []
 
         try:
@@ -388,7 +405,7 @@ def run_daily_pipeline():
             )
             source_counts["pubmed"] += len(pubmed)
         except Exception as e:
-            print(f"    [PubMed] Error: {e}")
+            logger.error("[PubMed] Fetch error for user %s: %s", user_id[:8], e)
             pubmed = []
 
         try:
@@ -398,12 +415,12 @@ def run_daily_pipeline():
             )
             source_counts["openalex"] += len(openalex)
         except Exception as e:
-            print(f"    [OpenAlex] Error: {e}")
+            logger.error("[OpenAlex] Fetch error for user %s: %s", user_id[:8], e)
             openalex = []
 
         user_papers = arxiv + s2 + pubmed + openalex
-        print(f"    Fetched {len(user_papers)} papers "
-              f"(ArXiv={len(arxiv)}, S2={len(s2)}, PubMed={len(pubmed)}, OpenAlex={len(openalex)})")
+        logger.info("  Fetched %d papers (ArXiv=%d, S2=%d, PubMed=%d, OpenAlex=%d)",
+                    len(user_papers), len(arxiv), len(s2), len(pubmed), len(openalex))
 
         for p in user_papers:
             user_paper_ids[user_id].add(p.get("arxiv_id", ""))
@@ -411,9 +428,9 @@ def run_daily_pipeline():
         all_raw_papers.extend(user_papers)
 
     all_papers = _deduplicate_papers([all_raw_papers])
-    print(f"\nTotal unique papers across all users: {len(all_papers)}")
+    logger.info("Total unique papers across all users: %d", len(all_papers))
 
-    print("\n--- Processing papers (embed + summarize) ---")
+    logger.info("--- Processing papers (embed + summarize) ---")
     processed_papers: dict[str, dict] = {}
     papers_to_embed: list[tuple[str, dict]] = []
 
@@ -451,37 +468,50 @@ def run_daily_pipeline():
         processed_papers[pid] = paper_record
         papers_to_embed.append((pid, paper_record))
 
-    print(f"New papers to embed: {len(papers_to_embed)}")
+    logger.info("New papers to embed: %d (skipped %d existing)",
+                len(papers_to_embed), len(all_papers) - len(papers_to_embed))
 
+    arxiv_papers_to_extract = [
+        (pid, rec) for pid, rec in papers_to_embed
+        if rec.get("source") == "arxiv"
+    ]
     full_texts: dict[str, str | None] = {}
     if arxiv_papers_to_extract:
-        print(f"\n--- Extracting full text from {len(arxiv_papers_to_extract)} ArXiv PDFs ---")
+        logger.info("Extracting full text from %d ArXiv PDFs...", len(arxiv_papers_to_extract))
         ids_to_extract = [pid for pid, _ in arxiv_papers_to_extract]
         full_texts = batch_extract_arxiv(ids_to_extract, rate_limit=1.0)
 
     if papers_to_embed:
-        for batch_start in range(0, len(papers_to_embed), EMBEDDING_BATCH_SIZE):
+        total_papers = len(papers_to_embed)
+        for batch_start in range(0, total_papers, EMBEDDING_BATCH_SIZE):
             batch = papers_to_embed[batch_start : batch_start + EMBEDDING_BATCH_SIZE]
             texts = [f"{p['title']}. {p['abstract']}" for _, p in batch]
 
-            print(f"  Embedding batch {batch_start // EMBEDDING_BATCH_SIZE + 1} "
-                  f"({len(batch)} papers)...")
+            logger.info("Embedding batch %d (%d papers)...",
+                        batch_start // EMBEDDING_BATCH_SIZE + 1, len(batch))
+            embed_start = time.time()
             vectors = get_embeddings_batch(texts)
+            logger.info("  Embedding completed in %.1fs", time.time() - embed_start)
 
-            for (pid, paper_record), vector in zip(batch, vectors):
+            for idx, ((pid, paper_record), vector) in enumerate(zip(batch, vectors)):
                 paper_record["abstract_vector"] = vector
 
                 ft = full_texts.get(pid)
                 if ft:
                     paper_record["full_text"] = ft
 
+                paper_num = batch_start + idx + 1
+                logger.info("  Summarizing paper %d/%d: %s",
+                            paper_num, total_papers, paper_record["title"][:80])
+                summ_start = time.time()
                 summary = generate_paper_summary(paper_record["abstract"])
                 paper_record["summary"] = summary
+                logger.debug("    Summary generated in %.1fs", time.time() - summ_start)
 
                 try:
                     supabase.table("papers").insert(paper_record).execute()
                 except Exception as db_err:
-                    print(f"  DB insert error for {pid}: {db_err}")
+                    logger.error("DB insert error for paper %s: %s", pid[:20], db_err)
 
                 processed_papers[pid] = paper_record
 
@@ -491,17 +521,19 @@ def run_daily_pipeline():
         if processed_papers.get(pid, {}).get("full_text")
     ]
     if papers_with_text:
-        print(f"\n--- Chunking {len(papers_with_text)} full-text papers ---")
+        logger.info("Chunking %d full-text papers...", len(papers_with_text))
         all_chunks = batch_chunk_papers(papers_with_text)
-        print(f"  Generated {len(all_chunks)} chunks total")
+        logger.info("Generated %d chunks total", len(all_chunks))
 
         if all_chunks:
             for batch_start in range(0, len(all_chunks), EMBEDDING_BATCH_SIZE):
                 batch = all_chunks[batch_start : batch_start + EMBEDDING_BATCH_SIZE]
                 chunk_texts = [c["chunk_text"] for c in batch]
 
-                print(f"  Embedding chunk batch {batch_start // EMBEDDING_BATCH_SIZE + 1} "
-                      f"({len(batch)} chunks)...")
+                logger.info("  Embedding chunk batch %d/%d (%d chunks)...",
+                            batch_start // EMBEDDING_BATCH_SIZE + 1,
+                            (len(all_chunks) + EMBEDDING_BATCH_SIZE - 1) // EMBEDDING_BATCH_SIZE,
+                            len(batch))
                 chunk_vectors = get_embeddings_batch(chunk_texts)
 
                 for chunk, vector in zip(batch, chunk_vectors):
@@ -517,14 +549,13 @@ def run_daily_pipeline():
                             break
                         except Exception as chunk_err:
                             if attempt < 2:
-                                import time as _t
-                                _t.sleep(2 * (attempt + 1))
+                                time.sleep(2 * (attempt + 1))
                             else:
-                                print(f"    Chunk insert failed after 3 attempts: {chunk_err}")
+                                logger.error("Chunk insert failed after 3 attempts: %s", chunk_err)
 
-            print(f"  Stored {len(all_chunks)} chunks in paper_chunks table")
+            logger.info("Stored %d chunks in paper_chunks table", len(all_chunks))
 
-    print("\n--- Ranking papers per user (Cohere Rerank) ---")
+    logger.info("--- Ranking papers per user (Cohere Rerank) ---")
     feed_items_created = 0
 
     for user in users:
@@ -533,7 +564,7 @@ def run_daily_pipeline():
         paper_ids_for_user = user_paper_ids.get(user_id, set())
 
         if not paper_ids_for_user:
-            print(f"  Skipping user {user_id[:8]}... (no papers fetched)")
+            logger.info("Skipping user %s... (no papers fetched)", user_id[:8])
             continue
 
         optimized_raw = user.get("optimized_queries")
@@ -555,7 +586,8 @@ def run_daily_pipeline():
             if pid in processed_papers
         ]
 
-        print(f"  User {user_id[:8]}... - {len(user_pool)} papers -> Cohere rerank -> top {TOP_MATCHES_PER_USER}")
+        logger.info("User %s... - %d papers -> Cohere rerank -> top %d",
+                     user_id[:8], len(user_pool), TOP_MATCHES_PER_USER)
 
         if len(user_pool) > TOP_MATCHES_PER_USER:
             reranked = rerank_papers(
@@ -581,12 +613,12 @@ def run_daily_pipeline():
             except Exception:
                 pass  # UNIQUE constraint - already in feed
 
-    print(f"\n{'=' * 60}")
-    print(f"Feed pipeline complete!")
-    print(f"  Users processed: {len(users)}")
-    print(f"  Unique papers: {len(processed_papers)}")
-    print(f"  Feed items created: {feed_items_created}")
-    print(f"{'=' * 60}")
+    logger.info("=" * 60)
+    logger.info("Feed pipeline complete!")
+    logger.info("  Users processed: %d", len(users))
+    logger.info("  Unique papers: %d", len(processed_papers))
+    logger.info("  Feed items created: %d", feed_items_created)
+    logger.info("=" * 60)
 
     graph_result = {}
     try:
@@ -595,9 +627,9 @@ def run_daily_pipeline():
         if new_paper_ids:
             graph_result = run_graph_pipeline(paper_ids=new_paper_ids)
         else:
-            print("\nNo new papers - skipping graph pipeline")
+            logger.info("No new papers - skipping graph pipeline")
     except Exception as e:
-        print(f"\n[Graph Pipeline] Error (non-fatal): {e}")
+        logger.error("[Graph Pipeline] Error (non-fatal): %s", e)
         graph_result = {"status": "error", "message": str(e)}
 
     return {

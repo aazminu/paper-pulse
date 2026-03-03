@@ -10,6 +10,7 @@ Docs: https://api.semanticscholar.org/
 """
 
 import os
+import logging
 import time
 import requests
 from datetime import datetime, date, timedelta
@@ -18,6 +19,8 @@ from typing import List, Optional
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger("semantic_scholar")
 
 S2_API_KEY = os.getenv("SEMANTIC_SCHOLAR_API_KEY", "")
 S2_BASE_URL = "https://api.semanticscholar.org/graph/v1"
@@ -113,7 +116,7 @@ def _parse_paper(raw: dict) -> Optional[dict]:
             "source": "semantic_scholar",
         }
     except Exception as e:
-        print(f"  Skipping malformed S2 paper: {e}")
+        logger.warning("Skipping malformed S2 paper: %s", e)
         return None
 
 
@@ -190,18 +193,18 @@ def fetch_recent_papers(
                 retry_after = int(resp.headers.get("Retry-After", 10))
                 retries = getattr(fetch_recent_papers, '_retries', 0) + 1
                 if retries > 3:
-                    print(f"  [S2] Rate limited too many times, skipping remaining requests")
+                    logger.warning("[S2] Rate limited too many times, skipping remaining requests")
                     fetch_recent_papers._retries = 0
                     break
                 fetch_recent_papers._retries = retries
-                print(f"  [S2] Rate limited, waiting {retry_after}s (attempt {retries}/3)...")
+                logger.warning("[S2] Rate limited, waiting %ds (attempt %d/3)...", retry_after, retries)
                 time.sleep(retry_after)
                 continue
 
             fetch_recent_papers._retries = 0  # Reset on success
 
             if resp.status_code != 200:
-                print(f"  [S2] HTTP {resp.status_code} for query '{query_text}', skipping")
+                logger.warning("[S2] HTTP %d for query, skipping", resp.status_code)
                 continue
 
             data = resp.json()
@@ -216,9 +219,9 @@ def fetch_recent_papers(
             time.sleep(S2_RATE_LIMIT)
 
         except Exception as e:
-            print(f"  [S2] Error fetching query '{query_text}': {e}")
+            logger.error("[S2] Error fetching query: %s", e)
             continue
 
     papers = papers[:max_results]
-    print(f"[Semantic Scholar] Fetched {len(papers)} papers across {list(s2_fields)}")
+    logger.info("[Semantic Scholar] Fetched %d papers across %s", len(papers), list(s2_fields))
     return papers

@@ -1,9 +1,12 @@
 import json as _json
+import logging
 from typing import Optional
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from app.database import supabase
+
+logger = logging.getLogger("ask")
 from app.services.openai_service import (
     get_embedding,
     answer_question_with_context,
@@ -27,7 +30,7 @@ def _get_graph_context(paper_ids: list[str]) -> str:
         from app.services.neo4j_service import get_graph_context_for_query
         return get_graph_context_for_query(paper_ids)
     except Exception as e:
-        print(f"  [GraphRAG] Graph context unavailable: {e}")
+        logger.warning("[GraphRAG] Graph context unavailable: %s", e)
         return ""
 
 class AskRequest(BaseModel):
@@ -105,7 +108,7 @@ def _find_title_matches(question: str, user_id: str) -> list[dict]:
         return [paper for _, _, paper in scored[:3]]
 
     except Exception as e:
-        print(f"  Title matching failed: {e}")
+        logger.error("Title matching failed: %s", e)
         return []
 
 
@@ -117,10 +120,7 @@ def _retrieve_context(question_vector: list[float], user_id: str, question: str)
 
     title_matches = _find_title_matches(question, user_id)
     if title_matches:
-        print(
-            f"  Title match found {len(title_matches)} paper(s): "
-            + ", ".join(p['title'][:60] for p in title_matches)
-        )
+        logger.info("Title match found %d paper(s)", len(title_matches))
 
     chunk_results = []
     try:
@@ -134,12 +134,12 @@ def _retrieve_context(question_vector: list[float], user_id: str, question: str)
         ).execute()
         chunk_results = chunk_rpc.data or []
     except Exception as e:
-        print(f"  Chunk search failed (table may not exist yet): {e}")
+        logger.error("Chunk search failed (table may not exist yet): %s", e)
 
     vector_papers: list[dict] = []
 
     if chunk_results:
-        print(f"  Found {len(chunk_results)} relevant chunks")
+        logger.info("Found %d relevant chunks", len(chunk_results))
 
         reranked_chunks = rerank_chunks(
             question=question,
@@ -171,7 +171,7 @@ def _retrieve_context(question_vector: list[float], user_id: str, question: str)
             paper["full_text"] = "\n\n".join(c["chunk_text"] for c in best_chunks)
             vector_papers.append(paper)
     else:
-        print("  No chunks found, falling back to paper-level search")
+        logger.info("No chunks found, falling back to paper-level search")
         rpc_response = supabase.rpc(
             "match_user_papers",
             {
@@ -209,11 +209,11 @@ def _retrieve_context(question_vector: list[float], user_id: str, question: str)
 def ask_question(request: AskRequest):
     """Text-only Q&A endpoint with conversation history and smart retrieval."""
     try:
-        print(f"User {request.user_id} asked: {request.question}")
+        logger.info("Q&A request from user %s...", request.user_id[:8])
 
         history = request.history or []
         intent = classify_query_intent(request.question, len(history) > 0)
-        print(f"  Intent: {intent}")
+        logger.info("  Intent: %s", intent)
 
         if intent == "general":
             return answer_question_with_context(request.question, [], history=history)
@@ -234,14 +234,14 @@ def ask_question(request: AskRequest):
 
         graph_context = _get_graph_context([p["arxiv_id"] for p in context_papers])
 
-        print(f"  {len(context_papers)} papers retrieved. Generating answer...")
+        logger.info("  %d papers retrieved. Generating answer...", len(context_papers))
         return answer_question_with_context(
             request.question, context_papers, history=history,
             graph_context=graph_context,
         )
 
     except Exception as e:
-        print(f"Error in Q&A pipeline: {e}")
+        logger.error("Error in Q&A pipeline: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -263,7 +263,7 @@ async def ask_multimodal(
         parsed_history = []
 
     try:
-        print(f"Multimodal ask from {user_id}: '{question}' + {len(files)} file(s)")
+        logger.info("Multimodal Q&A from user %s... with %d file(s)", user_id[:8], len(files))
 
         attachments: list[dict] = []
         file_text_for_embedding: list[str] = []
@@ -272,17 +272,17 @@ async def ask_multimodal(
             file_bytes = await upload.read()
 
             if len(file_bytes) > MAX_FILE_SIZE:
-                print(f"  Skipping {upload.filename}: exceeds 25MB limit")
+                logger.warning("Skipping file: exceeds 25MB limit")
                 continue
 
             content_type = upload.content_type or "application/octet-stream"
             filename = upload.filename or "file"
 
-            print(f"  Processing: {filename} ({content_type}, {len(file_bytes)} bytes)")
+            logger.info("  Processing file (%s, %d bytes)", content_type, len(file_bytes))
             result = process_file(file_bytes, content_type, filename)
 
             if result is None:
-                print(f"  Unsupported file type: {content_type}")
+                logger.warning("  Unsupported file type: %s", content_type)
                 continue
 
             attachments.append(result)
@@ -309,7 +309,8 @@ async def ask_multimodal(
 
         graph_context = _get_graph_context([p["arxiv_id"] for p in context_papers])
 
-        print(f"  {len(context_papers)} papers, {len(attachments)} attachments. Generating answer...")
+        logger.info("  %d papers, %d attachments. Generating answer...",
+                    len(context_papers), len(attachments))
 
         return answer_question_multimodal(
             question=question or "Analyze the attached file(s) and relate to my papers.",
@@ -320,7 +321,7 @@ async def ask_multimodal(
         )
 
     except Exception as e:
-        print(f"Error in multimodal Q&A: {e}")
+        logger.error("Error in multimodal Q&A: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -390,7 +391,7 @@ def ask_stream(request: AskRequest):
             yield _sse("done", {})
 
         except Exception as e:
-            print(f"Error in streaming Q&A: {e}")
+            logger.error("Error in streaming Q&A: %s", e)
             yield _sse("error", {"message": str(e)})
 
     return StreamingResponse(
@@ -477,7 +478,7 @@ async def ask_stream_multimodal(
             yield _sse("done", {})
 
         except Exception as e:
-            print(f"Error in multimodal streaming: {e}")
+            logger.error("Error in multimodal streaming: %s", e)
             yield _sse("error", {"message": str(e)})
 
     return StreamingResponse(

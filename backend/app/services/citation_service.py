@@ -8,6 +8,7 @@ Fetches citation relationships (references + citations) from:
 Returns lists of cited paper IDs to build the CITES relationship in Neo4j.
 """
 
+import logging
 import time
 import urllib.request
 import urllib.parse
@@ -18,6 +19,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 OPENALEX_MAILTO = os.getenv("OPENALEX_MAILTO", "")
+
+logger = logging.getLogger("citation")
 
 S2_FIELDS = "externalIds,title"
 S2_BASE = "https://api.semanticscholar.org/graph/v1/paper"
@@ -31,7 +34,7 @@ def _s2_get(url: str) -> dict | None:
         with urllib.request.urlopen(req, timeout=15) as resp:
             return json.loads(resp.read().decode())
     except Exception as e:
-        print(f"    [CitationFetch] S2 request failed: {e}")
+        logger.warning("S2 request failed: %s", e)
         return None
 
 
@@ -101,7 +104,7 @@ def fetch_citations_openalex(doi: str) -> dict:
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode())
     except Exception as e:
-        print(f"    [CitationFetch] OpenAlex request failed: {e}")
+        logger.warning("OpenAlex request failed: %s", e)
         return result
 
     referenced = data.get("referenced_works", [])
@@ -126,16 +129,16 @@ def batch_fetch_citations(papers: list[dict], rate_limit: float = 1.5) -> dict[s
         if not pid:
             continue
 
-        print(f"  [CitationFetch] Fetching for {pid}: {paper.get('title', '')[:50]}...")
+        logger.info("Fetching citations for %s: %s", pid, paper.get('title', '')[:50])
         citation_data = fetch_citations_s2(pid)
 
         ref_count = len(citation_data["references"])
         cite_count = len(citation_data["citations"])
 
         if ref_count or cite_count:
-            print(f" -> {ref_count} references, {cite_count} citations")
+            logger.info("  -> %d references, %d citations", ref_count, cite_count)
         else:
-            print(f" -> No citation data found")
+            logger.info("  -> No citation data found")
 
         results[pid] = citation_data
         time.sleep(rate_limit)

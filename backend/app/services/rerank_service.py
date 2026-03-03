@@ -14,6 +14,7 @@ Requires COHERE_API_KEY in your .env file.
 Pricing: https://cohere.com/pricing
 """
 
+import logging
 import os
 from typing import List, Optional
 
@@ -22,10 +23,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+logger = logging.getLogger("rerank")
+
 COHERE_API_KEY = os.getenv("COHERE_API_KEY", "")
 
 if not COHERE_API_KEY:
-    print("WARNING: COHERE_API_KEY not set. Reranking will fall back to embedding similarity order.")
+    logger.warning("COHERE_API_KEY not set. Reranking will fall back to embedding similarity order.")
     _client = None
 else:
     _client = cohere.ClientV2(api_key=COHERE_API_KEY)
@@ -54,7 +57,7 @@ def rerank_papers(
         return []
 
     if not _client:
-        print("  [Rerank] No Cohere API key - returning papers in original order.")
+        logger.warning("No Cohere API key — returning papers in original order.")
         return papers[:top_n]
 
     documents = []
@@ -82,7 +85,7 @@ def rerank_papers(
         return reranked
 
     except Exception as e:
-        print(f"  [Rerank] Cohere reranking failed, falling back to original order: {e}")
+        logger.error("Cohere reranking failed, falling back to original order: %s", e)
         return papers[:top_n]
 
 
@@ -139,5 +142,5 @@ def rerank_chunks(
         return reranked
 
     except Exception as e:
-        print(f"  [Rerank] Chunk reranking failed: {e}")
+        logger.error("Chunk reranking failed: %s", e)
         return chunks[:top_n]

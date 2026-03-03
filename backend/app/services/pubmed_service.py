@@ -11,6 +11,7 @@ Docs: https://www.ncbi.nlm.nih.gov/books/NBK25501/
 """
 
 import os
+import logging
 import time
 import requests
 import xml.etree.ElementTree as ET
@@ -20,6 +21,8 @@ from typing import List, Optional
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger("pubmed")
 
 NCBI_API_KEY = os.getenv("NCBI_API_KEY", "")
 NCBI_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
@@ -68,12 +71,12 @@ def _search_pmids(query: str, max_results: int = 100, days_back: int = 7, sort: 
     try:
         resp = requests.get(f"{NCBI_BASE}/esearch.fcgi", params=params, timeout=30)
         if resp.status_code != 200:
-            print(f"  [PubMed] esearch HTTP {resp.status_code}")
+            logger.warning("[PubMed] esearch HTTP %d", resp.status_code)
             return []
         data = resp.json()
         return data.get("esearchresult", {}).get("idlist", [])
     except Exception as e:
-        print(f"  [PubMed] esearch error: {e}")
+        logger.error("[PubMed] esearch error: %s", e)
         return []
 
 
@@ -99,7 +102,7 @@ def _fetch_details(pmids: List[str]) -> List[dict]:
         try:
             resp = requests.get(f"{NCBI_BASE}/efetch.fcgi", params=params, timeout=30)
             if resp.status_code != 200:
-                print(f"  [PubMed] efetch HTTP {resp.status_code}")
+                logger.warning("[PubMed] efetch HTTP %d", resp.status_code)
                 continue
 
             root = ET.fromstring(resp.text)
@@ -111,7 +114,7 @@ def _fetch_details(pmids: List[str]) -> List[dict]:
 
             time.sleep(NCBI_RATE_LIMIT)
         except Exception as e:
-            print(f"  [PubMed] efetch error: {e}")
+            logger.error("[PubMed] efetch error: %s", e)
             continue
 
     return papers
@@ -208,7 +211,7 @@ def _parse_article(article_el) -> Optional[dict]:
             "doi": doi,
         }
     except Exception as e:
-        print(f"  [PubMed] Error parsing article: {e}")
+        logger.warning("[PubMed] Error parsing article: %s", e)
         return None
 
 
@@ -236,7 +239,7 @@ def fetch_recent_papers(
         mesh_terms.extend(terms)
 
     if not mesh_terms:
-        print(f"[PubMed] No MeSH mappings for domains {domains}, skipping.")
+        logger.info("[PubMed] No MeSH mappings for domains, skipping.")
         return []
 
     mesh_terms = list(set(mesh_terms))
@@ -251,7 +254,7 @@ def fetch_recent_papers(
                 if len(papers) >= max_results:
                     break
                 query = f'({sq}) AND ("{term}"[MeSH Terms])'
-                print(f"  [PubMed] Searching: {query} (limit={per_term_limit})")
+                logger.info("[PubMed] Searching (limit=%d)", per_term_limit)
                 pmids = _search_pmids(query, max_results=per_term_limit, days_back=days_back, sort="relevance")
                 if pmids:
                     time.sleep(NCBI_RATE_LIMIT)
@@ -262,7 +265,7 @@ def fetch_recent_papers(
                             papers.append(p)
         else:
             query = f'"{term}"[MeSH Terms]'
-            print(f"  [PubMed] Searching: {query} (limit={per_term_limit})")
+            logger.info("[PubMed] Searching (limit=%d)", per_term_limit)
             pmids = _search_pmids(query, max_results=per_term_limit, days_back=days_back)
             if pmids:
                 time.sleep(NCBI_RATE_LIMIT)
@@ -276,5 +279,5 @@ def fetch_recent_papers(
             break
 
     papers = papers[:max_results]
-    print(f"[PubMed] Fetched {len(papers)} papers across {len(mesh_terms)} MeSH terms")
+    logger.info("[PubMed] Fetched %d papers across %d MeSH terms", len(papers), len(mesh_terms))
     return papers

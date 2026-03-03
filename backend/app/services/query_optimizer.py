@@ -12,9 +12,12 @@ This is called once at onboarding (and whenever the user updates their
 interests), NOT on every pipeline run.
 """
 
+import logging
 import json
 from typing import Optional
 from app.services.openai_service import client, SUMMARY_MODEL
+
+logger = logging.getLogger("query_optimizer")
 
 
 def optimize_user_interests(
@@ -99,11 +102,10 @@ Rules:
         }
 
     except json.JSONDecodeError as e:
-        print(f"[QueryOptimizer] Failed to parse LLM response: {e}")
-        print(f"[QueryOptimizer] Raw response: {raw[:200]}")
+        logger.warning("Failed to parse LLM response: %s", e)
         return _fallback_extract(interest_text)
     except Exception as e:
-        print(f"[QueryOptimizer] Error: {e}")
+        logger.error("Query optimization error: %s", e)
         return _fallback_extract(interest_text)
 
 

@@ -10,6 +10,7 @@ Rate limit: 100k requests/day (polite pool - just set a mailto in the header).
 """
 
 import os
+import logging
 import time
 import requests
 from datetime import datetime, date, timedelta
@@ -19,6 +20,8 @@ from urllib.parse import quote
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger("openalex")
 
 OPENALEX_BASE_URL = "https://api.openalex.org"
 OPENALEX_MAILTO = os.getenv("OPENALEX_MAILTO", "")
@@ -143,7 +146,7 @@ def _parse_work(raw: dict) -> Optional[dict]:
             "source": "openalex",
         }
     except Exception as e:
-        print(f"  Skipping malformed OpenAlex work: {e}")
+        logger.warning("Skipping malformed OpenAlex work: %s", e)
         return None
 
 
@@ -204,12 +207,12 @@ def fetch_recent_papers(
                     )
 
                     if resp.status_code == 429:
-                        print(f"  [OpenAlex] Rate limited, backing off...")
+                        logger.warning("[OpenAlex] Rate limited, backing off...")
                         time.sleep(5)
                         continue
 
                     if resp.status_code != 200:
-                        print(f"  [OpenAlex] HTTP {resp.status_code}")
+                        logger.warning("[OpenAlex] HTTP %d", resp.status_code)
                         continue
 
                     data = resp.json()
@@ -224,11 +227,11 @@ def fetch_recent_papers(
                     time.sleep(OPENALEX_RATE_LIMIT)
 
                 except Exception as e:
-                    print(f"  [OpenAlex] Error: {e}")
+                    logger.error("[OpenAlex] Error: %s", e)
                     continue
 
         papers = papers[:max_results]
-        print(f"[OpenAlex] Fetched {len(papers)} papers via {len(search_queries)} optimized queries")
+        logger.info("[OpenAlex] Fetched %d papers via %d optimized queries", len(papers), len(search_queries))
         return papers
 
     for concept_id in concept_ids:
@@ -255,12 +258,12 @@ def fetch_recent_papers(
                 )
 
                 if resp.status_code == 429:
-                    print(f"  [OpenAlex] Rate limited, backing off...")
+                    logger.warning("[OpenAlex] Rate limited, backing off...")
                     time.sleep(5)
                     continue
 
                 if resp.status_code != 200:
-                    print(f"  [OpenAlex] HTTP {resp.status_code}")
+                    logger.warning("[OpenAlex] HTTP %d", resp.status_code)
                     break
 
                 data = resp.json()
@@ -279,12 +282,12 @@ def fetch_recent_papers(
                 time.sleep(OPENALEX_RATE_LIMIT)
 
             except Exception as e:
-                print(f"  [OpenAlex] Error: {e}")
+                logger.error("[OpenAlex] Error: %s", e)
                 break
 
         if len(papers) >= max_results:
             break
 
     papers = papers[:max_results]
-    print(f"[OpenAlex] Fetched {len(papers)} papers across {len(concept_ids)} concepts")
+    logger.info("[OpenAlex] Fetched %d papers across %d concepts", len(papers), len(concept_ids))
     return papers

@@ -2,11 +2,14 @@
 Chat CRUD router - persistent conversations like ChatGPT / Claude.
 """
 import json
+import logging
 from uuid import UUID
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.database import supabase
 from app.services.openai_service import generate_chat_title
+
+logger = logging.getLogger("chats")
 
 router = APIRouter(prefix="/chats", tags=["Chats"])
 
@@ -233,7 +236,7 @@ def add_message(chat_id: UUID, req: SaveMessageRequest):
                     supabase.table("chats").update({"title": title}).eq("id", str(chat_id)).execute()
                     generated_title = title
                 except Exception as title_err:
-                    print(f"Title generation failed: {title_err}")
+                    logger.error("Title generation failed: %s", title_err)
 
         result = {"message": msg_resp.data[0]}
         if generated_title:

@@ -1,9 +1,12 @@
+import logging
 from fastapi import APIRouter, HTTPException
 from app.models import UserCreate
 from app.database import supabase
 from app.services.openai_service import get_embedding
 from app.services.query_optimizer import optimize_user_interests
 import json
+
+logger = logging.getLogger("users")
 
 router = APIRouter(
     prefix="/users",
@@ -27,7 +30,8 @@ def create_user(user: UserCreate):
                 domains=user.domains,
             )
             user_data["optimized_queries"] = json.dumps(optimized)
-            print(f"[Onboarding] Generated optimized queries: {optimized.get('search_queries', [])}")
+            logger.info("[Onboarding] Generated %d optimized queries for new user",
+                        len(optimized.get('search_queries', [])))
         
         response = supabase.table("users").insert(user_data).execute()
         
@@ -37,7 +41,7 @@ def create_user(user: UserCreate):
             raise HTTPException(status_code=400, detail="Failed to create user.")
             
     except Exception as e:
-        print(f"Error creating user: {e}")
+        logger.error("Error creating user: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{user_id}", summary="Get a user's profile")

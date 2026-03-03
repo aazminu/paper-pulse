@@ -1,6 +1,9 @@
+import logging
 from fastapi import APIRouter, HTTPException
 from app.models import FeedItemUpdate
 from app.database import supabase
+
+logger = logging.getLogger("feed")
 
 router = APIRouter(
     prefix="/feed",
@@ -29,7 +32,7 @@ def get_user_feed(user_id: str):
         return formatted_feed
 
     except Exception as e:
-        print(f"Error fetching feed: {e}")
+        logger.error("Error fetching feed: %s", e)
         raise HTTPException(status_code=500, detail="Failed to fetch feed.")
 
 @router.get("/{user_id}/saved", summary="Get a user's saved/bookmarked papers")
@@ -54,7 +57,7 @@ def get_saved_papers(user_id: str):
         return formatted
 
     except Exception as e:
-        print(f"Error fetching saved papers: {e}")
+        logger.error("Error fetching saved papers: %s", e)
         raise HTTPException(status_code=500, detail="Failed to fetch saved papers.")
 
 @router.patch("/{feed_item_id}", summary="Save or unsave a paper")
@@ -71,5 +74,5 @@ def update_feed_item(feed_item_id: str, update_data: FeedItemUpdate):
         return {"status": "success", "is_saved": response.data[0]["is_saved"]}
 
     except Exception as e:
-        print(f"Error updating feed item: {e}")
+        logger.error("Error updating feed item: %s", e)
         raise HTTPException(status_code=500, detail="Failed to update feed item.")

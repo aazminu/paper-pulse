@@ -8,12 +8,15 @@ Uses o4-mini to extract structured entities from paper abstracts:
 Output feeds into Neo4j graph population.
 """
 
+import logging
 import json
 import os
 from dotenv import load_dotenv
 from openai import OpenAI
 
 load_dotenv()
+
+logger = logging.getLogger("entity_extraction")
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -63,7 +66,7 @@ def extract_entities(title: str, abstract: str, authors: list[str] | None = None
 
         raw = response.choices[0].message.content
         if not raw:
-            print(f"  [EntityExtract] Empty response from LLM")
+            logger.warning("Empty response from LLM")
             return {"concepts": [], "affiliations": []}
         raw = raw.strip()
 
@@ -104,10 +107,10 @@ def extract_entities(title: str, abstract: str, authors: list[str] | None = None
         }
 
     except (json.JSONDecodeError, KeyError, TypeError) as e:
-        print(f"  [EntityExtract] JSON parse error: {e}")
+        logger.warning("JSON parse error: %s", e)
         return {"concepts": [], "affiliations": []}
     except Exception as e:
-        print(f"  [EntityExtract] Error: {e}")
+        logger.error("Entity extraction error: %s", e)
         return {"concepts": [], "affiliations": []}
 
 
@@ -130,13 +133,14 @@ def batch_extract_entities(papers: list[dict]) -> dict[str, dict]:
             results[pid] = {"concepts": [], "affiliations": []}
             continue
 
-        print(f"  [EntityExtract] Processing {pid}: {title[:60]}...")
+        logger.info("Processing %s: %s", pid, title[:60])
         entities = extract_entities(title, abstract, authors)
         results[pid] = entities
 
         concept_names = [c["name"] for c in entities.get("concepts", [])]
         if concept_names:
-            print(f"    Concepts: {', '.join(concept_names[:5])}" +
-                  (f" (+{len(concept_names)-5} more)" if len(concept_names) > 5 else ""))
+            logger.info("  Concepts: %s%s",
+                        ", ".join(concept_names[:5]),
+                        f" (+{len(concept_names)-5} more)" if len(concept_names) > 5 else "")
 
     return results

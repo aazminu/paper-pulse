@@ -1,5 +1,8 @@
+import logging
 from fastapi import APIRouter, HTTPException
 from app.database import supabase
+
+logger = logging.getLogger("papers")
 
 router = APIRouter(
     prefix="/papers",
@@ -24,5 +27,5 @@ def get_paper(arxiv_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error fetching paper: {e}")
+        logger.error("Error fetching paper: %s", e)
         raise HTTPException(status_code=500, detail="Failed to fetch paper.")

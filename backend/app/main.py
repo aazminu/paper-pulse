@@ -1,6 +1,14 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
+
+# Configure logging before anything else
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -17,18 +25,20 @@ from app.services.pipeline_service import run_daily_pipeline
 
 load_dotenv()
 
+logger = logging.getLogger("app")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
         from app.services.neo4j_service import init_schema, close_driver
         init_schema()
     except Exception as e:
-        print(f"[Neo4j] Schema init skipped: {e}")
+        logger.warning("Neo4j schema init skipped: %s", e)
 
     scheduler = BackgroundScheduler()
     scheduler.add_job(run_daily_pipeline, 'cron', hour=0, minute=0)
     scheduler.start()
-    print("Background scheduler started. Nightly pipeline set for midnight.")
+    logger.info("Background scheduler started. Nightly pipeline set for midnight.")
     
     yield
 
@@ -37,7 +47,7 @@ async def lifespan(app: FastAPI):
         close_driver()
     except Exception:
         pass
-    print("Background scheduler shut down.")
+    logger.info("Background scheduler shut down.")
 
 app = FastAPI(title="PaperPulse API", lifespan=lifespan)
 cors_origin = os.getenv("CORS_ORIGIN", "http://localhost:3000")

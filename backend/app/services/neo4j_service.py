@@ -15,12 +15,15 @@ Graph Schema:
     (:Paper)-[:INVOLVES_CONCEPT]->(:Concept)
 """
 
+import logging
 import os
 from contextlib import contextmanager
 from dotenv import load_dotenv
 from neo4j import GraphDatabase
 
 load_dotenv()
+
+logger = logging.getLogger("neo4j")
 
 NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
 NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
@@ -71,7 +74,7 @@ def init_schema():
             )
         except Exception:
             pass  # index may already exist
-    print("[Neo4j] Schema initialized")
+    logger.info("Schema initialized")
 
 
 def upsert_paper(paper: dict):

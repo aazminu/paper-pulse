@@ -1,9 +1,12 @@
+import logging
 import urllib.request
 import urllib.parse
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from typing import List
 import time
+
+logger = logging.getLogger("arxiv")
 
 OAI_NS = {'atom': 'http://www.w3.org/2005/Atom'}
 
@@ -88,14 +91,14 @@ def _fetch_with_queries(
 
             except Exception as e:
                 if attempt < 2:
-                    print(f"  [ArXiv] Retry {attempt+1} for query '{query_text}': {e}")
+                    logger.warning("[ArXiv] Retry %d for query: %s", attempt+1, e)
                     time.sleep(3 * (attempt + 1))
                 else:
-                    print(f"  [ArXiv] Failed after 3 attempts for query '{query_text}': {e}")
+                    logger.error("[ArXiv] Failed after 3 attempts for query: %s", e)
 
         time.sleep(ARXIV_RATE_LIMIT_SECONDS)
 
-    print(f"[ArXiv] Fetched {len(papers)} papers via {len(search_queries)} optimized queries")
+    logger.info("[ArXiv] Fetched %d papers via %d optimized queries", len(papers), len(search_queries))
     return papers[:max_results]
 
 
@@ -136,10 +139,10 @@ def _fetch_by_category(cat_part: str, max_results: int) -> List[dict]:
                 time.sleep(ARXIV_RATE_LIMIT_SECONDS)
 
         except Exception as e:
-            print(f"Error fetching ArXiv batch at start={start}: {e}")
+            logger.error("Error fetching ArXiv batch at start=%d: %s", start, e)
             break
 
-    print(f"[ArXiv] Fetched {len(papers)} papers by category")
+    logger.info("[ArXiv] Fetched %d papers by category", len(papers))
     return papers
 
 
@@ -170,5 +173,5 @@ def _parse_entry(entry) -> dict | None:
             "source": "arxiv",
         }
     except Exception as parse_err:
-        print(f"Skipping malformed ArXiv entry: {parse_err}")
+        logger.warning("Skipping malformed ArXiv entry: %s", parse_err)
         return None
