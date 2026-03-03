@@ -860,6 +860,18 @@ Full chat interface with a sidebar listing all conversations. Features include p
 
 Interactive force-directed graph powered by react-force-graph-2d. Papers are blue, authors are purple, concepts are green, and institutions are amber. Features include node hover highlighting with neighbor emphasis, node and edge type filtering, full-text search, click-to-detail panels, auto-detected cluster visualization with click-to-zoom, three synthesis modes, Mermaid diagram rendering, report saving and loading, PNG export, and a table of contents for long reports.
 
+### Error and Status Pages
+
+**Not Found (404)** — Displays when a user navigates to a route that does not exist. Shows a centered "Page not found" message with a link back to the home page.
+
+**Error Boundary** — Catches unhandled runtime errors within the app. Shows a "Something went wrong" message with a "Try Again" button that triggers React's error recovery, plus a link back to home.
+
+**Unauthorized** — Shown at `/unauthorized` when a user lacks permission. If the user is not signed in, it displays a "Sign In" button; if they are signed in but lack access, it shows a "Go to Feed" link instead.
+
+### Page Transitions
+
+A shared `PageLoader` component replaces blank screen flashes during auth checks and page transitions. All protected pages show a full-screen spinner while authentication state loads, and a `RedirectLoader` variant handles navigation with a "Redirecting..." message. The onboarding page displays a "Setting up your feed..." loader after successful submission.
+
 ---
 
 ## Getting Started
@@ -1007,11 +1019,14 @@ paper-pulse/
             globals.css                     Global styles
             auth/
                 callback/route.ts           OAuth callback handler
+            error.tsx                       Runtime error boundary
+            not-found.tsx                   Custom 404 page
             onboarding/page.tsx             Domain selection and interest input
             feed/page.tsx                   Daily paper feed with date grouping
             saved/page.tsx                  Saved papers view
             ask/page.tsx                    AI chat interface
             graph/page.tsx                  Knowledge graph explorer
+            unauthorized/page.tsx           Access denied page
             sign-in/page.tsx                Email and password sign-in
             sign-up/page.tsx                Email and password sign-up
         components/
@@ -1019,6 +1034,7 @@ paper-pulse/
             mermaid-renderer.tsx            Mermaid diagram renderer
             auth-provider.tsx               Supabase Auth context and useAuth hook
             user-menu.tsx                   User avatar dropdown with sign-out
+            page-loader.tsx                 PageLoader, RedirectLoader, and useAuthGuard
             ui/                             shadcn/ui primitives
         utils/
             supabase/
