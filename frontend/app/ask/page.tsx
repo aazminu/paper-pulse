@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, Suspense } from "react";
 import { useUser, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -665,6 +665,14 @@ function InputBar({
 /* Main component */
 
 export default function AskPage() {
+	return (
+		<Suspense>
+			<AskPageContent />
+		</Suspense>
+	);
+}
+
+function AskPageContent() {
 	const { user, isLoaded } = useUser();
 	const searchParams = useSearchParams();
 	const router = useRouter();
