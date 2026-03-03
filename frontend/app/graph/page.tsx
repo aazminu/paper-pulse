@@ -1,10 +1,17 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import {
+	useEffect,
+	useState,
+	useRef,
+	useCallback,
+	useMemo,
+	Suspense,
+} from "react";
 import { useAuth } from "@/components/auth-provider";
 import UserMenu from "@/components/user-menu";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -165,11 +172,21 @@ const getEdgeId = (val: string | GraphNode): string =>
 	typeof val === "string" ? val : val.id;
 
 export default function GraphPage() {
+	return (
+		<Suspense>
+			<GraphPageContent />
+		</Suspense>
+	);
+}
+
+function GraphPageContent() {
 	const { isLoaded, user } = useAuth();
 	const router = useRouter();
+	const searchParams = useSearchParams();
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const graphRef = useRef<any>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
+	const deepLinkHandled = useRef(false);
 
 	/* State */
 	const [graphData, setGraphData] = useState<GraphData>({
@@ -354,6 +371,74 @@ export default function GraphPage() {
 		}
 		setDetailsLoading(false);
 	}, []);
+
+	/* Deep-link: auto-focus a paper from ?paper=<arxiv_id> */
+	useEffect(() => {
+		if (loading || deepLinkHandled.current) return;
+		const paperId = searchParams.get("paper");
+		if (!paperId) return;
+		deepLinkHandled.current = true;
+
+		const node = graphData.nodes.find(
+			(n) => n.id === paperId && n.type === "paper",
+		);
+
+		if (node) {
+			setSelectedNode(node);
+			fetchNodeDetails(node);
+			setTimeout(() => {
+				if (graphRef.current && node.x !== undefined && node.y !== undefined) {
+					graphRef.current.centerAt(node.x, node.y, 800);
+					graphRef.current.zoom(4, 800);
+				}
+			}, 600);
+		} else {
+			(async () => {
+				try {
+					const res = await fetch(
+						`${API}/graph/paper/${encodeURIComponent(paperId)}`,
+					);
+					if (res.ok) {
+						const data = await res.json();
+						setGraphData((prev) => {
+							const existingIds = new Set(prev.nodes.map((n) => n.id));
+							const newNodes = (data.nodes || []).filter(
+								(n: GraphNode) => !existingIds.has(n.id),
+							);
+							const newEdges = data.edges || [];
+							return {
+								nodes: [...prev.nodes, ...newNodes],
+								edges: [...prev.edges, ...newEdges],
+							};
+						});
+						const paperNode: GraphNode = (data.nodes || []).find(
+							(n: GraphNode) => n.id === paperId && n.type === "paper",
+						) || {
+							id: paperId,
+							label: paperId,
+							type: "paper" as const,
+						};
+						setSelectedNode(paperNode);
+						fetchNodeDetails(paperNode);
+						setTimeout(() => {
+							if (graphRef.current) {
+								graphRef.current.centerAt(0, 0, 800);
+								graphRef.current.zoom(3, 800);
+							}
+						}, 800);
+					}
+				} catch {
+					const fallbackNode: GraphNode = {
+						id: paperId,
+						label: paperId,
+						type: "paper",
+					};
+					setSelectedNode(fallbackNode);
+					fetchNodeDetails(fallbackNode);
+				}
+			})();
+		}
+	}, [loading, searchParams, graphData.nodes, fetchNodeDetails]);
 
 	/* Highlight neighbors on hover */
 	const getNeighborIds = useCallback(

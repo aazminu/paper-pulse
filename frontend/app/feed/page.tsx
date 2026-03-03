@@ -22,6 +22,7 @@ import {
 	BrainCircuit,
 	Sparkles,
 	CalendarDays,
+	Network,
 } from "lucide-react";
 
 interface FeedItem {
@@ -432,7 +433,19 @@ export default function FeedPage() {
 															}
 														>
 															<Sparkles className="h-4 w-4" /> Explore with AI
-														</Button>
+														</Button>{" "}
+														<Button
+															variant="ghost"
+															size="sm"
+															className="gap-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950"
+															onClick={() =>
+																router.push(
+																	`/graph?paper=${encodeURIComponent(item.paper.arxiv_id)}`,
+																)
+															}
+														>
+															<Network className="h-4 w-4" /> View in Graph
+														</Button>{" "}
 													</div>
 													<Button
 														variant="outline"
