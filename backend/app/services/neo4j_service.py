@@ -35,6 +35,7 @@ _driver = None
 def get_driver():
     global _driver
     if _driver is None:
+        logger.info("Connecting to Neo4j at %s (user=%s)", NEO4J_URI, NEO4J_USER)
         _driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
     return _driver
 
@@ -58,23 +59,27 @@ def get_session():
 
 def init_schema():
     """Create uniqueness constraints & indexes (safe to call repeatedly)."""
-    with get_session() as s:
-        s.run("CREATE CONSTRAINT IF NOT EXISTS FOR (p:Paper) REQUIRE p.arxiv_id IS UNIQUE")
-        s.run("CREATE CONSTRAINT IF NOT EXISTS FOR (a:Author) REQUIRE a.name_lower IS UNIQUE")
-        s.run("CREATE CONSTRAINT IF NOT EXISTS FOR (c:Concept) REQUIRE c.name_lower IS UNIQUE")
-        s.run("CREATE CONSTRAINT IF NOT EXISTS FOR (i:Institution) REQUIRE i.name_lower IS UNIQUE")
-        try:
-            s.run(
-                "CREATE FULLTEXT INDEX paper_title_ft IF NOT EXISTS "
-                "FOR (p:Paper) ON EACH [p.title]"
-            )
-            s.run(
-                "CREATE FULLTEXT INDEX concept_name_ft IF NOT EXISTS "
-                "FOR (c:Concept) ON EACH [c.name]"
-            )
-        except Exception:
-            pass  # index may already exist
-    logger.info("Schema initialized")
+    try:
+        with get_session() as s:
+            s.run("CREATE CONSTRAINT IF NOT EXISTS FOR (p:Paper) REQUIRE p.arxiv_id IS UNIQUE")
+            s.run("CREATE CONSTRAINT IF NOT EXISTS FOR (a:Author) REQUIRE a.name_lower IS UNIQUE")
+            s.run("CREATE CONSTRAINT IF NOT EXISTS FOR (c:Concept) REQUIRE c.name_lower IS UNIQUE")
+            s.run("CREATE CONSTRAINT IF NOT EXISTS FOR (i:Institution) REQUIRE i.name_lower IS UNIQUE")
+            try:
+                s.run(
+                    "CREATE FULLTEXT INDEX paper_title_ft IF NOT EXISTS "
+                    "FOR (p:Paper) ON EACH [p.title]"
+                )
+                s.run(
+                    "CREATE FULLTEXT INDEX concept_name_ft IF NOT EXISTS "
+                    "FOR (c:Concept) ON EACH [c.name]"
+                )
+            except Exception:
+                pass  # index may already exist
+        logger.info("Schema initialized")
+    except Exception as e:
+        logger.error("Failed to connect to Neo4j at %s: %s", NEO4J_URI, e)
+        raise
 
 
 def upsert_paper(paper: dict):

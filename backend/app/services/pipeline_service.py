@@ -305,11 +305,14 @@ def run_single_user_pipeline(user_id: str):
 
     try:
         from app.services.graph_pipeline_service import run_graph_pipeline
-        new_ids = [pid for pid, _ in papers_to_embed]
-        if new_ids:
-            run_graph_pipeline(paper_ids=new_ids)
+        all_ids = list(processed_papers.keys())
+        if all_ids:
+            logger.info("[Graph Pipeline] Sending %d papers to graph pipeline", len(all_ids))
+            run_graph_pipeline(paper_ids=all_ids)
+        else:
+            logger.warning("[Graph Pipeline] No papers to send to graph pipeline")
     except Exception as e:
-        logger.error("[Graph Pipeline] Error (non-fatal): %s", e)
+        logger.error("[Graph Pipeline] Error (non-fatal): %s", e, exc_info=True)
 
     logger.info("Bootstrap complete for user %s! %d feed items created.", user_id[:8], feed_items)
     return {"status": "success", "feed_items_created": feed_items}
@@ -623,13 +626,14 @@ def run_daily_pipeline():
     graph_result = {}
     try:
         from app.services.graph_pipeline_service import run_graph_pipeline
-        new_paper_ids = [pid for pid, _ in papers_to_embed]
-        if new_paper_ids:
-            graph_result = run_graph_pipeline(paper_ids=new_paper_ids)
+        all_paper_ids = list(processed_papers.keys())
+        if all_paper_ids:
+            logger.info("[Graph Pipeline] Sending %d papers to graph pipeline", len(all_paper_ids))
+            graph_result = run_graph_pipeline(paper_ids=all_paper_ids)
         else:
-            logger.info("No new papers - skipping graph pipeline")
+            logger.info("No papers processed - skipping graph pipeline")
     except Exception as e:
-        logger.error("[Graph Pipeline] Error (non-fatal): %s", e)
+        logger.error("[Graph Pipeline] Error (non-fatal): %s", e, exc_info=True)
         graph_result = {"status": "error", "message": str(e)}
 
     return {

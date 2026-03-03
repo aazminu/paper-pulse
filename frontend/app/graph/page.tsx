@@ -1055,7 +1055,7 @@ function GraphPageContent() {
 	return (
 		<div className="flex flex-col bg-zinc-50 dark:bg-black h-screen w-full overflow-hidden">
 			{/* Header */}
-			<header className="border-b bg-white dark:bg-zinc-950 px-4 sm:px-6 py-3 flex justify-between items-center shrink-0 z-20">
+			<header className="border-b bg-white dark:bg-zinc-950 px-4 sm:px-6 py-3 flex justify-between items-center shrink-0 z-40">
 				<div className="flex items-center gap-4 sm:gap-6">
 					<h1 className="text-xl font-bold tracking-tight">PaperPulse</h1>
 					<nav className="hidden sm:flex gap-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">
