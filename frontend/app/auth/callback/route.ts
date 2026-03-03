@@ -4,7 +4,7 @@ import { createClient } from "@/utils/supabase/server";
 export async function GET(request: Request) {
 	const { searchParams, origin } = new URL(request.url);
 	const code = searchParams.get("code");
-	const next = searchParams.get("next") ?? "/feed";
+	const next = searchParams.get("next");
 
 	if (code) {
 		const supabase = await createClient();
@@ -13,14 +13,32 @@ export async function GET(request: Request) {
 		if (!error) {
 			const forwardedHost = request.headers.get("x-forwarded-host");
 			const isLocalEnv = process.env.NODE_ENV === "development";
+			const baseUrl = isLocalEnv
+				? origin
+				: forwardedHost
+					? `https://${forwardedHost}`
+					: origin;
 
-			if (isLocalEnv) {
-				return NextResponse.redirect(`${origin}${next}`);
-			} else if (forwardedHost) {
-				return NextResponse.redirect(`https://${forwardedHost}${next}`);
-			} else {
-				return NextResponse.redirect(`${origin}${next}`);
+			if (next) {
+				return NextResponse.redirect(`${baseUrl}${next}`);
 			}
+
+			const {
+				data: { user },
+			} = await supabase.auth.getUser();
+
+			if (user) {
+				try {
+					const apiUrl =
+						process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+					const res = await fetch(`${apiUrl}/users/${user.id}`);
+					if (res.ok) {
+						return NextResponse.redirect(`${baseUrl}/feed`);
+					}
+				} catch {}
+			}
+
+			return NextResponse.redirect(`${baseUrl}/onboarding`);
 		}
 	}
 
