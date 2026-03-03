@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { useUser, UserButton } from "@clerk/nextjs";
+import { useAuth } from "@/components/auth-provider";
+import UserMenu from "@/components/user-menu";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
@@ -164,7 +165,7 @@ const getEdgeId = (val: string | GraphNode): string =>
 	typeof val === "string" ? val : val.id;
 
 export default function GraphPage() {
-	const { isLoaded, user } = useUser();
+	const { isLoaded, user } = useAuth();
 	const router = useRouter();
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const graphRef = useRef<any>(null);
@@ -1056,7 +1057,7 @@ export default function GraphPage() {
 							</div>
 						)}
 					</div>
-					<UserButton />
+					<UserMenu />
 				</div>
 			</header>
 

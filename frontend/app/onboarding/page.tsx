@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useUser } from "@clerk/nextjs";
+import { useAuth } from "@/components/auth-provider";
 import { useRouter } from "next/navigation";
 import {
 	Card,
@@ -79,7 +79,7 @@ const DOMAIN_CATEGORIES = AVAILABLE_DOMAINS.reduce(
 );
 
 export default function OnboardingPage() {
-	const { user, isLoaded } = useUser();
+	const { user, isLoaded } = useAuth();
 	const router = useRouter();
 
 	const [selectedDomains, setSelectedDomains] = useState<string[]>([]);
@@ -108,7 +108,7 @@ export default function OnboardingPage() {
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({
 						id: user.id,
-						email: user.primaryEmailAddress?.emailAddress || "",
+						email: user.email || "",
 						domains: selectedDomains,
 						interest_text: interestText,
 					}),
@@ -129,7 +129,7 @@ export default function OnboardingPage() {
 		}
 	};
 
-	if (!isLoaded) return null; // Prevent hydration flickers while Clerk loads
+	if (!isLoaded) return null;
 
 	return (
 		<div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-black p-4">

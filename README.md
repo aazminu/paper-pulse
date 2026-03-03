@@ -75,12 +75,12 @@ You sign up, pick your research areas, describe your interests in a sentence or 
 
 ### Screenshots
 
-| Feed | Ask AI | Knowledge Graph |
-|------|--------|-----------------|
+| Feed                                                     | Ask AI                                                 | Knowledge Graph                                            |
+| -------------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------- |
 | ![Feed Screenshot](<!-- IMAGE_PLACEHOLDER: feed.png -->) | ![Ask Screenshot](<!-- IMAGE_PLACEHOLDER: ask.png -->) | ![Graph Screenshot](<!-- IMAGE_PLACEHOLDER: graph.png -->) |
 
-| Onboarding | Saved Papers | Literature Review |
-|------------|--------------|-------------------|
+| Onboarding                                                           | Saved Papers                                               | Literature Review                                            |
+| -------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------ |
 | ![Onboarding Screenshot](<!-- IMAGE_PLACEHOLDER: onboarding.png -->) | ![Saved Screenshot](<!-- IMAGE_PLACEHOLDER: saved.png -->) | ![Review Screenshot](<!-- IMAGE_PLACEHOLDER: review.png -->) |
 
 ---
@@ -88,21 +88,27 @@ You sign up, pick your research areas, describe your interests in a sentence or 
 ## Key Features
 
 ### Daily Personalized Feed
+
 Papers are fetched from ArXiv, Semantic Scholar, PubMed, and OpenAlex based on your selected domains and interests. Each paper is ranked by relevance to your profile using Cohere neural reranking, and the top 25 appear in your feed grouped by date.
 
 ### AI-Generated Summaries
+
 Every paper gets a three-sentence summary written by an AI reasoning model. These summaries explain what the paper does, why it matters, and what the key results are, without requiring you to read the full paper.
 
 ### Ask AI with Full Paper Context
+
 Ask questions about any paper or topic in your feed. The system retrieves relevant paper content using hybrid search across titles, chunks, and full papers, enriches it with knowledge graph context, and streams a detailed answer with inline citations.
 
 ### Multimodal Input
+
 Upload images, PDFs, Word documents, audio files, or video alongside your questions. The system extracts text or transcribes media and includes it in the AI response context.
 
 ### Knowledge Graph Explorer
+
 An interactive force-directed graph visualization that shows how papers, authors, concepts, and institutions relate to each other. Click any node to see its connections, search across the graph, filter by node or edge type, and detect research clusters automatically.
 
 ### Literature Synthesis
+
 Select papers from the knowledge graph and generate structured literature reviews. Three modes are available:
 
 - **Quick Review** produces a concise overview with a Mermaid citation diagram
@@ -110,6 +116,7 @@ Select papers from the knowledge graph and generate structured literature review
 - **Deep Analysis** uses an autonomous AI agent that explores the graph iteratively, discovers themes, and writes a comprehensive synthesis
 
 ### Persistent Chat History
+
 All conversations are saved with full message history, file attachments, and source citations. Chats can be starred, renamed, searched, and resumed at any time.
 
 ---
@@ -262,12 +269,12 @@ flowchart TD
 
 **Paper source details**:
 
-| Source | API | Rate Limit | Batch Size | Default Lookback |
-|--------|-----|------------|------------|------------------|
-| ArXiv | Atom XML feed | 3s between requests | 100 per call | Sorted by relevance or date |
-| Semantic Scholar | REST JSON | 1s between requests | 100 per call | 3 days |
-| PubMed | E-utilities XML | 0.35s with API key | 50 per fetch batch | 7 days |
-| OpenAlex | REST JSON | 0.2s between requests | 50 per page | 3 days |
+| Source           | API             | Rate Limit            | Batch Size         | Default Lookback            |
+| ---------------- | --------------- | --------------------- | ------------------ | --------------------------- |
+| ArXiv            | Atom XML feed   | 3s between requests   | 100 per call       | Sorted by relevance or date |
+| Semantic Scholar | REST JSON       | 1s between requests   | 100 per call       | 3 days                      |
+| PubMed           | E-utilities XML | 0.35s with API key    | 50 per fetch batch | 7 days                      |
+| OpenAlex         | REST JSON       | 0.2s between requests | 50 per page        | 3 days                      |
 
 **Deduplication** prefers ArXiv versions when the same paper appears from multiple sources. Papers are matched by ArXiv ID first, then by normalized title similarity.
 
@@ -283,12 +290,12 @@ Each paper goes through several processing stages after fetching:
 
 **Chunking** splits full-text papers into overlapping segments for sub-document retrieval:
 
-| Parameter | Value |
-|-----------|-------|
-| Target chunk size | 512 tokens |
-| Overlap between chunks | 50 tokens |
-| Minimum chunk size | 50 tokens |
-| Tokenizer | cl100k_base |
+| Parameter              | Value       |
+| ---------------------- | ----------- |
+| Target chunk size      | 512 tokens  |
+| Overlap between chunks | 50 tokens   |
+| Minimum chunk size     | 50 tokens   |
+| Tokenizer              | cl100k_base |
 
 The chunking algorithm splits on paragraph boundaries first, then falls back to sentence-level splitting for oversized paragraphs. Each chunk is prefixed with the paper title to give the embedding model document-level context.
 
@@ -350,23 +357,23 @@ graph LR
 
 **Node types and properties**:
 
-| Node | Properties |
-|------|------------|
-| Paper | arxiv_id, title, published_date, source, url |
-| Author | name, name_lower |
-| Concept | name, name_lower, category |
-| Institution | name, name_lower |
+| Node        | Properties                                   |
+| ----------- | -------------------------------------------- |
+| Paper       | arxiv_id, title, published_date, source, url |
+| Author      | name, name_lower                             |
+| Concept     | name, name_lower, category                   |
+| Institution | name, name_lower                             |
 
 Concept categories are: method, dataset, theory, task, and technique.
 
 **Edge types**:
 
-| Edge | Meaning |
-|------|---------|
-| CITES | Paper A references Paper B |
-| AUTHORED | Author wrote Paper |
+| Edge             | Meaning                         |
+| ---------------- | ------------------------------- |
+| CITES            | Paper A references Paper B      |
+| AUTHORED         | Author wrote Paper              |
 | INVOLVES_CONCEPT | Paper uses or discusses Concept |
-| AFFILIATED_WITH | Author belongs to Institution |
+| AFFILIATED_WITH  | Author belongs to Institution   |
 
 **Graph population pipeline**:
 
@@ -379,6 +386,7 @@ Concept categories are: method, dataset, theory, task, and technique.
 **Cluster detection** uses connected-component analysis. Two papers are considered connected if they share 2 or more concepts or have a direct citation link. The algorithm runs BFS to find all connected components and labels each cluster by its top 3 most frequent concepts.
 
 **Constraints and indexes**:
+
 - Uniqueness constraints on Paper.arxiv_id, Author.name_lower, Concept.name_lower, Institution.name_lower
 - Full-text indexes on Paper.title and Concept.name for search
 
@@ -388,39 +396,39 @@ The Q&A system supports text-only and multimodal queries with SSE streaming.
 
 **Models and configuration**:
 
-| Setting | Value |
-|---------|-------|
-| Q&A model | GPT-4.1 |
-| Temperature | 0.4 |
-| Max output tokens | 16,384 |
-| Max context window | 32,000 tokens |
-| History window | Last 10 messages |
+| Setting            | Value            |
+| ------------------ | ---------------- |
+| Q&A model          | GPT-4.1          |
+| Temperature        | 0.4              |
+| Max output tokens  | 16,384           |
+| Max context window | 32,000 tokens    |
+| History window     | Last 10 messages |
 | Message truncation | 3,000 characters |
 
 **Context budget allocation** divides the available token budget evenly across retrieved papers, with a minimum of 800 tokens per paper. If a paper's full text exceeds its budget, it is truncated at the token level by encoding, slicing, and decoding. Papers with fewer than 200 remaining tokens after title allocation are dropped.
 
 **Multimodal processing**:
 
-| Input Type | Processing |
-|------------|------------|
-| Images | Base64-encoded and sent to GPT-4.1 vision |
-| PDFs | Text extracted via PyMuPDF |
-| Word docs | Text extracted via python-docx |
-| Audio | Transcribed via Whisper |
-| Video | Audio track extracted via ffmpeg, then transcribed via Whisper |
-| Text files | Read directly as UTF-8 |
+| Input Type | Processing                                                     |
+| ---------- | -------------------------------------------------------------- |
+| Images     | Base64-encoded and sent to GPT-4.1 vision                      |
+| PDFs       | Text extracted via PyMuPDF                                     |
+| Word docs  | Text extracted via python-docx                                 |
+| Audio      | Transcribed via Whisper                                        |
+| Video      | Audio track extracted via ffmpeg, then transcribed via Whisper |
+| Text files | Read directly as UTF-8                                         |
 
 Maximum file size is 25 MB per upload.
 
 **SSE streaming** sends five event types during a response:
 
-| Event | Payload | Timing |
-|-------|---------|--------|
-| stage | Current processing step name | As each stage starts |
-| sources | Retrieved paper metadata | After retrieval completes |
-| token | Single token of the LLM response | During generation |
-| done | Final complete response text | After generation finishes |
-| error | Error message | On failure |
+| Event   | Payload                          | Timing                    |
+| ------- | -------------------------------- | ------------------------- |
+| stage   | Current processing step name     | As each stage starts      |
+| sources | Retrieved paper metadata         | After retrieval completes |
+| token   | Single token of the LLM response | During generation         |
+| done    | Final complete response text     | After generation finishes |
+| error   | Error message                    | On failure                |
 
 ### Agent-Based Graph Traversal
 
@@ -468,57 +476,57 @@ The agent runs with temperature 0.2 for structured tool-calling decisions and sw
 
 ### Backend
 
-| Technology | Role |
-|------------|------|
-| Python 3.11+ | Runtime |
-| FastAPI | REST API framework |
-| Uvicorn | ASGI server |
-| APScheduler | Scheduled pipeline execution |
-| Pydantic | Request and response validation |
-| Supabase Python SDK | PostgreSQL and pgvector client |
-| Neo4j Python Driver | Knowledge graph client |
-| OpenAI Python SDK | GPT-4.1, o4-mini, embeddings, Whisper |
-| Cohere Python SDK | Neural reranking |
-| PyMuPDF | PDF text extraction |
-| python-docx | Word document parsing |
-| tiktoken | Token counting |
-| httpx | Async HTTP client |
-| python-dotenv | Environment configuration |
-| tenacity | Retry logic for API calls |
+| Technology          | Role                                  |
+| ------------------- | ------------------------------------- |
+| Python 3.11+        | Runtime                               |
+| FastAPI             | REST API framework                    |
+| Uvicorn             | ASGI server                           |
+| APScheduler         | Scheduled pipeline execution          |
+| Pydantic            | Request and response validation       |
+| Supabase Python SDK | PostgreSQL and pgvector client        |
+| Neo4j Python Driver | Knowledge graph client                |
+| OpenAI Python SDK   | GPT-4.1, o4-mini, embeddings, Whisper |
+| Cohere Python SDK   | Neural reranking                      |
+| PyMuPDF             | PDF text extraction                   |
+| python-docx         | Word document parsing                 |
+| tiktoken            | Token counting                        |
+| httpx               | Async HTTP client                     |
+| python-dotenv       | Environment configuration             |
+| tenacity            | Retry logic for API calls             |
 
 ### Frontend
 
-| Technology | Role |
-|------------|------|
-| Next.js 16 | React framework with App Router |
-| React 19 | UI library |
-| TypeScript 5 | Type safety |
-| Tailwind CSS 4 | Utility-first styling |
-| shadcn/ui | Reusable UI components |
-| Clerk | Authentication and user management |
-| react-force-graph-2d | Force-directed graph visualization |
-| react-markdown | Markdown rendering |
-| rehype-katex and remark-math | LaTeX math rendering |
-| Mermaid | Diagram generation |
-| Lucide React | Icon library |
+| Technology                   | Role                               |
+| ---------------------------- | ---------------------------------- |
+| Next.js 16                   | React framework with App Router    |
+| React 19                     | UI library                         |
+| TypeScript 5                 | Type safety                        |
+| Tailwind CSS 4               | Utility-first styling              |
+| shadcn/ui                    | Reusable UI components             |
+| Supabase Auth                | Authentication and user management |
+| react-force-graph-2d         | Force-directed graph visualization |
+| react-markdown               | Markdown rendering                 |
+| rehype-katex and remark-math | LaTeX math rendering               |
+| Mermaid                      | Diagram generation                 |
+| Lucide React                 | Icon library                       |
 
 ### Infrastructure
 
-| Technology | Role |
-|------------|------|
-| Supabase | Managed PostgreSQL with pgvector extension |
-| Neo4j Aura | Managed graph database |
-| Clerk | Authentication provider |
+| Technology    | Role                                       |
+| ------------- | ------------------------------------------ |
+| Supabase      | Managed PostgreSQL with pgvector extension |
+| Neo4j Aura    | Managed graph database                     |
+| Supabase Auth | Authentication (built into Supabase)       |
 
 ### AI Models
 
-| Model | Provider | Purpose |
-|-------|----------|---------|
-| GPT-4.1 | OpenAI | Q&A answers, multimodal vision, literature synthesis, publication reviews, agent traversal |
-| o4-mini | OpenAI | Paper summaries, intent classification, chat titles, entity extraction, query optimization |
-| text-embedding-3-large | OpenAI | 1536-dimension vector embeddings for papers, chunks, and user interests |
-| Whisper | OpenAI | Audio and video transcription |
-| rerank-v4.0-pro | Cohere | Neural reranking with 32K token context per document |
+| Model                  | Provider | Purpose                                                                                    |
+| ---------------------- | -------- | ------------------------------------------------------------------------------------------ |
+| GPT-4.1                | OpenAI   | Q&A answers, multimodal vision, literature synthesis, publication reviews, agent traversal |
+| o4-mini                | OpenAI   | Paper summaries, intent classification, chat titles, entity extraction, query optimization |
+| text-embedding-3-large | OpenAI   | 1536-dimension vector embeddings for papers, chunks, and user interests                    |
+| Whisper                | OpenAI   | Audio and video transcription                                                              |
+| rerank-v4.0-pro        | Cohere   | Neural reranking with 32K token context per document                                       |
 
 ---
 
@@ -529,7 +537,7 @@ The agent runs with temperature 0.2 for structured tool-calling decisions and sw
 ```mermaid
 erDiagram
     users {
-        text id PK "Clerk user ID"
+        text id PK "Supabase Auth user ID"
         text email
         text[] domains
         text interest_text
@@ -608,23 +616,23 @@ erDiagram
 
 ### Supabase RPC Functions
 
-| Function | Purpose |
-|----------|---------|
-| match_paper_chunks | Cosine similarity search on chunk vectors, filtered by user feed |
-| match_user_papers | Cosine similarity search on paper abstract vectors, filtered by user feed |
+| Function           | Purpose                                                                   |
+| ------------------ | ------------------------------------------------------------------------- |
+| match_paper_chunks | Cosine similarity search on chunk vectors, filtered by user feed          |
+| match_user_papers  | Cosine similarity search on paper abstract vectors, filtered by user feed |
 
 ### Neo4j Graph Schema
 
-| Constraint | Target |
-|------------|--------|
-| Paper.arxiv_id | Unique |
-| Author.name_lower | Unique |
-| Concept.name_lower | Unique |
+| Constraint             | Target |
+| ---------------------- | ------ |
+| Paper.arxiv_id         | Unique |
+| Author.name_lower      | Unique |
+| Concept.name_lower     | Unique |
 | Institution.name_lower | Unique |
 
-| Full-Text Index | Field |
-|-----------------|-------|
-| paper_title_ft | Paper.title |
+| Full-Text Index | Field        |
+| --------------- | ------------ |
+| paper_title_ft  | Paper.title  |
 | concept_name_ft | Concept.name |
 
 ---
@@ -633,96 +641,102 @@ erDiagram
 
 ### Users
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | /users/ | Create user from onboarding with domain selection and interest text |
-| GET | /users/{user_id} | Get user profile |
+| Method | Path             | Description                                                         |
+| ------ | ---------------- | ------------------------------------------------------------------- |
+| POST   | /users/          | Create user from onboarding with domain selection and interest text |
+| GET    | /users/{user_id} | Get user profile                                                    |
 
 ### Feed
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | /feed/{user_id} | Get daily paper feed ordered by date and relevance |
-| GET | /feed/{user_id}/saved | Get saved papers |
-| PATCH | /feed/{feed_item_id} | Toggle save status |
+| Method | Path                  | Description                                        |
+| ------ | --------------------- | -------------------------------------------------- |
+| GET    | /feed/{user_id}       | Get daily paper feed ordered by date and relevance |
+| GET    | /feed/{user_id}/saved | Get saved papers                                   |
+| PATCH  | /feed/{feed_item_id}  | Toggle save status                                 |
 
 ### Papers
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | /papers/{arxiv_id} | Get full paper metadata, summary, and text |
+| Method | Path               | Description                                |
+| ------ | ------------------ | ------------------------------------------ |
+| GET    | /papers/{arxiv_id} | Get full paper metadata, summary, and text |
 
 ### Ask
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | /ask/ | Text-only Q&A with conversation history |
-| POST | /ask/multimodal | Q&A with file uploads |
-| POST | /ask/stream | SSE streaming text-only Q&A |
-| POST | /ask/stream/multimodal | SSE streaming multimodal Q&A |
+| Method | Path                   | Description                             |
+| ------ | ---------------------- | --------------------------------------- |
+| POST   | /ask/                  | Text-only Q&A with conversation history |
+| POST   | /ask/multimodal        | Q&A with file uploads                   |
+| POST   | /ask/stream            | SSE streaming text-only Q&A             |
+| POST   | /ask/stream/multimodal | SSE streaming multimodal Q&A            |
 
 ### Chats
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | /chats/ | List all chats sorted by starred then updated |
-| GET | /chats/search | Full-text search across chat titles and messages |
-| POST | /chats/ | Create new chat |
-| GET | /chats/{chat_id} | Get chat with all messages |
-| PATCH | /chats/{chat_id} | Update title or starred status |
-| DELETE | /chats/{chat_id} | Delete chat and all messages |
-| POST | /chats/{chat_id}/messages | Save a message with auto-title generation |
+| Method | Path                      | Description                                      |
+| ------ | ------------------------- | ------------------------------------------------ |
+| GET    | /chats/                   | List all chats sorted by starred then updated    |
+| GET    | /chats/search             | Full-text search across chat titles and messages |
+| POST   | /chats/                   | Create new chat                                  |
+| GET    | /chats/{chat_id}          | Get chat with all messages                       |
+| PATCH  | /chats/{chat_id}          | Update title or starred status                   |
+| DELETE | /chats/{chat_id}          | Delete chat and all messages                     |
+| POST   | /chats/{chat_id}/messages | Save a message with auto-title generation        |
 
 ### Knowledge Graph
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | /graph/explore | Full graph data for the explorer |
-| GET | /graph/stats | Node and edge counts |
-| GET | /graph/search | Full-text search across papers, authors, concepts |
-| GET | /graph/clusters | Auto-detected paper clusters |
-| GET | /graph/paper/{arxiv_id} | Paper neighborhood |
-| GET | /graph/paper/{arxiv_id}/related | Related papers by shared concepts and citations |
-| GET | /graph/paper/{arxiv_id}/citations | Citation network up to 3 hops |
-| GET | /graph/author/{name} | Co-author network |
-| GET | /graph/concept/{name} | Papers involving a concept |
-| GET | /graph/node/{node_id} | Node detail with neighborhood |
-| POST | /graph/synthesize | Quick literature review with Mermaid diagram |
-| POST | /graph/synthesize-publication | Publication-ready review with BibTeX |
-| POST | /graph/agent-synthesize | SSE-streamed agent traversal and synthesis |
-| GET | /graph/reports | List saved reports |
-| POST | /graph/reports | Save a report |
-| DELETE | /graph/reports/{report_id} | Delete a report |
-| POST | /graph/populate | Trigger graph population |
-| GET | /graph/populate/status | Check graph population status |
+| Method | Path                              | Description                                       |
+| ------ | --------------------------------- | ------------------------------------------------- |
+| GET    | /graph/explore                    | Full graph data for the explorer                  |
+| GET    | /graph/stats                      | Node and edge counts                              |
+| GET    | /graph/search                     | Full-text search across papers, authors, concepts |
+| GET    | /graph/clusters                   | Auto-detected paper clusters                      |
+| GET    | /graph/paper/{arxiv_id}           | Paper neighborhood                                |
+| GET    | /graph/paper/{arxiv_id}/related   | Related papers by shared concepts and citations   |
+| GET    | /graph/paper/{arxiv_id}/citations | Citation network up to 3 hops                     |
+| GET    | /graph/author/{name}              | Co-author network                                 |
+| GET    | /graph/concept/{name}             | Papers involving a concept                        |
+| GET    | /graph/node/{node_id}             | Node detail with neighborhood                     |
+| POST   | /graph/synthesize                 | Quick literature review with Mermaid diagram      |
+| POST   | /graph/synthesize-publication     | Publication-ready review with BibTeX              |
+| POST   | /graph/agent-synthesize           | SSE-streamed agent traversal and synthesis        |
+| GET    | /graph/reports                    | List saved reports                                |
+| POST   | /graph/reports                    | Save a report                                     |
+| DELETE | /graph/reports/{report_id}        | Delete a report                                   |
+| POST   | /graph/populate                   | Trigger graph population                          |
+| GET    | /graph/populate/status            | Check graph population status                     |
 
 ### Pipeline
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | /pipeline/run | Manually trigger the daily pipeline |
-| GET | /pipeline/status | Check pipeline running status |
+| Method | Path             | Description                         |
+| ------ | ---------------- | ----------------------------------- |
+| POST   | /pipeline/run    | Manually trigger the daily pipeline |
+| GET    | /pipeline/status | Check pipeline running status       |
 
 ---
 
 ## Frontend Pages
 
 ### Landing Page
-Centered hero with sign-in and sign-up buttons for unauthenticated users, and a "Go to my Feed" link for signed-in users. Uses Clerk authentication components.
+
+Centered hero with sign-in and sign-up buttons for unauthenticated users, and a "Go to my Feed" link for signed-in users. Uses Supabase Auth for session detection.
 
 ### Onboarding
+
 Domain selection grid with 28 research areas organized into five categories: Core Sciences, Life and Health Sciences, Engineering and Applied, Social Sciences and Humanities, and Physics Specializations. Includes a free-text interest description field. On submit, the backend generates an interest embedding and optimized search queries.
 
 ### Paper Feed
+
 Date-grouped paper cards with a date navigation sidebar. Each card shows the title, authors, source badge, relevance score, AI summary, and action buttons for saving and exploring with AI. Uses IntersectionObserver for scroll-based date tracking.
 
 ### Saved Papers
+
 Filtered view of bookmarked papers with search functionality. Same card layout as the main feed with an unsave toggle.
 
 ### Ask AI
+
 Full chat interface with a sidebar listing all conversations. Features include persistent chat sessions, file attachments with preview, voice recording via the MediaRecorder API, SSE streaming responses with stage indicators, markdown rendering with KaTeX math and GFM tables, and related paper suggestions from the knowledge graph.
 
 ### Knowledge Graph Explorer
+
 Interactive force-directed graph powered by react-force-graph-2d. Papers are blue, authors are purple, concepts are green, and institutions are amber. Features include node hover highlighting with neighbor emphasis, node and edge type filtering, full-text search, click-to-detail panels, auto-detected cluster visualization with click-to-zoom, three synthesis modes, Mermaid diagram rendering, report saving and loading, PNG export, and a table of contents for long reports.
 
 ---
@@ -735,7 +749,6 @@ Interactive force-directed graph powered by react-force-graph-2d. Papers are blu
 - Node.js 18 or later
 - A Supabase project with pgvector enabled
 - A Neo4j Aura instance or local Neo4j database
-- A Clerk application for authentication
 - API keys for OpenAI and Cohere
 
 ### Backend Setup
@@ -764,7 +777,7 @@ npm install
 cp .env.example .env.local
 ```
 
-Edit .env.local with your Clerk keys, then start the dev server:
+Edit .env.local with your Supabase URL and anon key, then start the dev server:
 
 ```bash
 npm run dev
@@ -778,26 +791,27 @@ The app will be available at http://localhost:3000.
 
 ### Backend
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| OPENAI_API_KEY | Yes | OpenAI API key for GPT-4.1, o4-mini, embeddings, Whisper |
-| COHERE_API_KEY | Yes | Cohere API key for rerank-v4.0-pro |
-| SUPABASE_URL | Yes | Supabase project URL |
-| SUPABASE_KEY | Yes | Supabase service role key |
-| NEO4J_URI | Yes | Neo4j connection URI |
-| NEO4J_USERNAME | Yes | Neo4j username |
-| NEO4J_PASSWORD | Yes | Neo4j password |
-| CORS_ORIGIN | No | Frontend origin URL, defaults to http://localhost:3000 |
-| SEMANTIC_SCHOLAR_API_KEY | No | Semantic Scholar API key for higher rate limits |
-| NCBI_API_KEY | No | PubMed API key for higher rate limits |
-| OPENALEX_MAILTO | No | Email for OpenAlex polite pool |
+| Variable                 | Required | Description                                              |
+| ------------------------ | -------- | -------------------------------------------------------- |
+| OPENAI_API_KEY           | Yes      | OpenAI API key for GPT-4.1, o4-mini, embeddings, Whisper |
+| COHERE_API_KEY           | Yes      | Cohere API key for rerank-v4.0-pro                       |
+| SUPABASE_URL             | Yes      | Supabase project URL                                     |
+| SUPABASE_KEY             | Yes      | Supabase service role key                                |
+| NEO4J_URI                | Yes      | Neo4j connection URI                                     |
+| NEO4J_USERNAME           | Yes      | Neo4j username                                           |
+| NEO4J_PASSWORD           | Yes      | Neo4j password                                           |
+| CORS_ORIGIN              | No       | Frontend origin URL, defaults to http://localhost:3000   |
+| SEMANTIC_SCHOLAR_API_KEY | No       | Semantic Scholar API key for higher rate limits          |
+| NCBI_API_KEY             | No       | PubMed API key for higher rate limits                    |
+| OPENALEX_MAILTO          | No       | Email for OpenAlex polite pool                           |
 
 ### Frontend
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY | Yes | Clerk publishable key |
-| CLERK_SECRET_KEY | Yes | Clerk secret key |
+| Variable                      | Required | Description                                        |
+| ----------------------------- | -------- | -------------------------------------------------- |
+| NEXT_PUBLIC_SUPABASE_URL      | Yes      | Supabase project URL                               |
+| NEXT_PUBLIC_SUPABASE_ANON_KEY | Yes      | Supabase anonymous (public) key                    |
+| NEXT_PUBLIC_API_URL           | Yes      | Backend API URL, defaults to http://localhost:8000 |
 
 ---
 
@@ -841,7 +855,7 @@ paper-pulse/
         package.json                        Node dependencies
         next.config.ts                      Next.js configuration
         app/
-            layout.tsx                      Root layout with Clerk provider
+            layout.tsx                      Root layout with Supabase AuthProvider
             page.tsx                        Landing page
             globals.css                     Global styles
             onboarding/page.tsx             Domain selection and interest input
@@ -849,12 +863,19 @@ paper-pulse/
             saved/page.tsx                  Saved papers view
             ask/page.tsx                    AI chat interface
             graph/page.tsx                  Knowledge graph explorer
-            sign-in/[[...sign-in]]/page.tsx Clerk sign-in
-            sign-up/[[...sign-up]]/page.tsx Clerk sign-up
+            sign-in/page.tsx                Email and password sign-in
+            sign-up/page.tsx                Email and password sign-up
         components/
             RelatedPapers.tsx               Related paper suggestions
             mermaid-renderer.tsx            Mermaid diagram renderer
+            auth-provider.tsx               Supabase Auth context and useAuth hook
+            user-menu.tsx                   User avatar dropdown with sign-out
             ui/                             shadcn/ui primitives
+        utils/
+            supabase/
+                client.ts                   Browser Supabase client
+                server.ts                   Server-side Supabase client
+                middleware.ts               Session refresh middleware helper
         lib/
             utils.ts                        Tailwind class merge utility
 ```

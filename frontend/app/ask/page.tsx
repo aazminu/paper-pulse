@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect, Suspense } from "react";
-import { useUser, UserButton } from "@clerk/nextjs";
+import { useAuth } from "@/components/auth-provider";
+import UserMenu from "@/components/user-menu";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
@@ -673,7 +674,7 @@ export default function AskPage() {
 }
 
 function AskPageContent() {
-	const { user, isLoaded } = useUser();
+	const { user, isLoaded } = useAuth();
 	const searchParams = useSearchParams();
 	const router = useRouter();
 
@@ -1584,7 +1585,7 @@ function AskPageContent() {
 						</Link>
 					</nav>
 				</div>
-				<UserButton />
+				<UserMenu />
 			</header>
 
 			{/* Body: sidebar + chat */}

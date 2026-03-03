@@ -5,7 +5,7 @@ from uuid import UUID
 
 
 class UserCreate(BaseModel):
-    id: str = Field(..., description="The Clerk User ID")
+    id: str = Field(..., description="The Supabase Auth User ID")
     email: str
     domains: List[str] = Field(default_factory=list, description="List of ArXiv domains e.g., ['cs', 'math']")
     interest_text: Optional[str] = None

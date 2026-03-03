@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
-import { useUser, UserButton } from "@clerk/nextjs";
+import { useAuth } from "@/components/auth-provider";
+import UserMenu from "@/components/user-menu";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -95,7 +96,7 @@ function formatDateLabel(dateStr: string): string {
 }
 
 export default function FeedPage() {
-	const { user, isLoaded } = useUser();
+	const { user, isLoaded } = useAuth();
 	const router = useRouter();
 	const [feed, setFeed] = useState<FeedItem[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
@@ -229,7 +230,7 @@ export default function FeedPage() {
 						</Link>
 					</nav>
 				</div>
-				<UserButton />
+				<UserMenu />
 			</header>
 
 			<div className="max-w-6xl mx-auto flex gap-12 py-8 px-4 sm:px-6">

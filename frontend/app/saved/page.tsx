@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useUser, UserButton } from "@clerk/nextjs";
+import { useAuth } from "@/components/auth-provider";
+import UserMenu from "@/components/user-menu";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -70,7 +71,7 @@ function getSourceLinkText(source?: string): string {
 }
 
 export default function SavedPage() {
-	const { user, isLoaded } = useUser();
+	const { user, isLoaded } = useAuth();
 	const router = useRouter();
 	const [saved, setSaved] = useState<SavedItem[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
@@ -156,7 +157,7 @@ export default function SavedPage() {
 						</Link>
 					</nav>
 				</div>
-				<UserButton />
+				<UserMenu />
 			</header>
 
 			<main className="max-w-4xl mx-auto py-8 px-4 sm:px-6">
