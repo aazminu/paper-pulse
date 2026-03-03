@@ -10,6 +10,9 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Supabase-4169E1?logo=postgresql&logoColor=white)
 ![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4.1-412991?logo=openai&logoColor=white)
 ![Cohere](https://img.shields.io/badge/Cohere-Rerank_v4-39594D)
+![AWS](https://img.shields.io/badge/AWS-App_Runner-FF9900?logo=amazonwebservices&logoColor=white)
+![Vercel](https://img.shields.io/badge/Vercel-Deployed-000000?logo=vercel&logoColor=white)
+![GitHub Actions](https://img.shields.io/badge/CI%2FCD-GitHub_Actions-2088FF?logo=githubactions&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 An AI-powered academic research platform that aggregates papers from four major sources, builds a knowledge graph of research connections, and lets you ask questions about your personalized paper feed using retrieval-augmented generation.
@@ -36,6 +39,8 @@ An AI-powered academic research platform that aggregates papers from four major 
   - [AI Question Answering](#ai-question-answering)
   - [Agent-Based Graph Traversal](#agent-based-graph-traversal)
 - [Tech Stack](#tech-stack)
+- [Authentication and Security](#authentication-and-security)
+- [Deployment](#deployment)
 - [Database Schema](#database-schema)
 - [API Reference](#api-reference)
 - [Frontend Pages](#frontend-pages)
@@ -125,7 +130,7 @@ All conversations are saved with full message history, file attachments, and sou
 
 For non-technical readers, here is the simplified flow:
 
-1. **You sign up** and pick topics like "Computer Science" or "Biology" and describe what specifically interests you
+1. **You sign up** with Google, GitHub, or email and pick topics like "Computer Science" or "Biology" and describe what specifically interests you
 2. **PaperPulse optimizes your interests** into precise search queries using AI
 3. **Every day at midnight**, the system searches four academic databases for papers matching your interests
 4. **Each paper is processed**: the full PDF text is extracted, an embedding vector is created for semantic search, and a summary is generated
@@ -139,6 +144,13 @@ For non-technical readers, here is the simplified flow:
 
 ```mermaid
 graph TB
+    subgraph Hosting
+        VCL[Vercel]
+        AR[AWS App Runner]
+        ECR[AWS ECR]
+        GHA[GitHub Actions CI/CD]
+    end
+
     subgraph Frontend
         LP[Landing Page]
         OB[Onboarding]
@@ -148,9 +160,16 @@ graph TB
         GR[Graph Explorer]
     end
 
+    subgraph Auth
+        SA[Supabase Auth]
+        GOA[Google OAuth]
+        GHA2[GitHub OAuth]
+    end
+
     subgraph Backend
         API[FastAPI Server]
         SCH[APScheduler - Midnight Cron]
+        AUTHMW[JWT Auth Middleware]
     end
 
     subgraph Pipeline
@@ -184,6 +203,17 @@ graph TB
         CF[Citation Fetcher]
         GP[Graph Population]
     end
+
+    GHA --> ECR
+    ECR --> AR
+    VCL --> Frontend
+    AR --> Backend
+
+    GOA --> SA
+    GHA2 --> SA
+    SA --> AUTHMW
+    Frontend --> AUTHMW
+    AUTHMW --> API
 
     LP --> OB
     OB --> API
@@ -271,12 +301,14 @@ flowchart TD
 
 **Paper source details**:
 
-| Source           | API             | Rate Limit            | Batch Size         | Default Lookback            |
-| ---------------- | --------------- | --------------------- | ------------------ | --------------------------- |
-| ArXiv            | Atom XML feed   | 3s between requests   | 100 per call       | Sorted by relevance or date |
-| Semantic Scholar | REST JSON       | 1s between requests   | 100 per call       | 3 days                      |
-| PubMed           | E-utilities XML | 0.35s with API key    | 50 per fetch batch | 7 days                      |
-| OpenAlex         | REST JSON       | 0.2s between requests | 50 per page        | 3 days                      |
+| Source           | API             | Rate Limit            | Batch Size         | Daily Lookback | Bootstrap Lookback |
+| ---------------- | --------------- | --------------------- | ------------------ | -------------- | ------------------ |
+| ArXiv            | Atom XML feed   | 3s between requests   | 100 per call       | 3 days         | 30 days            |
+| Semantic Scholar | REST JSON       | 1s between requests   | 100 per call       | 3 days         | 30 days            |
+| PubMed           | E-utilities XML | 0.35s with API key    | 50 per fetch batch | 7 days         | 30 days            |
+| OpenAlex         | REST JSON       | 0.2s between requests | 50 per page        | 3 days         | 30 days            |
+
+**Feed exclusion**: Before reranking, the pipeline queries each user's existing `feed_items` and removes any papers they have already received, ensuring only new papers enter the feed.
 
 **Deduplication** prefers ArXiv versions when the same paper appears from multiple sources. Papers are matched by ArXiv ID first, then by normalized title similarity.
 
@@ -514,11 +546,16 @@ The agent runs with temperature 0.2 for structured tool-calling decisions and sw
 
 ### Infrastructure
 
-| Technology    | Role                                       |
-| ------------- | ------------------------------------------ |
-| Supabase      | Managed PostgreSQL with pgvector extension |
-| Neo4j Aura    | Managed graph database                     |
-| Supabase Auth | Authentication (built into Supabase)       |
+| Technology     | Role                                        |
+| -------------- | ------------------------------------------- |
+| AWS App Runner | Managed backend hosting                     |
+| AWS ECR        | Docker container registry                   |
+| Vercel         | Frontend hosting and edge network           |
+| GitHub Actions | CI/CD pipeline for backend deployment       |
+| Docker         | Backend containerization                    |
+| Supabase       | Managed PostgreSQL with pgvector extension  |
+| Neo4j Aura     | Managed graph database                      |
+| Supabase Auth  | Authentication with Google and GitHub OAuth |
 
 ### AI Models
 
@@ -529,6 +566,85 @@ The agent runs with temperature 0.2 for structured tool-calling decisions and sw
 | text-embedding-3-large | OpenAI   | 1536-dimension vector embeddings for papers, chunks, and user interests                    |
 | Whisper                | OpenAI   | Audio and video transcription                                                              |
 | rerank-v4.0-pro        | Cohere   | Neural reranking with 32K token context per document                                       |
+
+---
+
+## Authentication and Security
+
+### Backend Security
+
+All backend API routes are protected by JWT-based authentication via Supabase Auth:
+
+- **`get_current_user()`** — Extracts the `Authorization: Bearer <token>` header, verifies the JWT with Supabase, and returns the authenticated user. Applied as a dependency on all routers.
+- **`require_same_user()`** — Ensures the authenticated user can only access their own data (feed, chats, reports). Used on user-scoped endpoints.
+- **`require_admin()`** — Protects admin-only endpoints (pipeline trigger, graph population) with an `X-Admin-Key` header. If `ADMIN_API_KEY` is not set, admin endpoints are unrestricted (dev mode).
+
+### Frontend Security
+
+- **`authFetch()`** — A wrapper around `fetch()` in [lib/api.ts](frontend/lib/api.ts) that automatically attaches the Supabase session JWT to every API request.
+- **`proxy.ts`** — Next.js 16 middleware proxy that calls `updateSession()` on every request to refresh the Supabase session cookie.
+- **Auth guards** — All protected pages (`/feed`, `/saved`, `/ask`, `/graph`, `/onboarding`) check `useAuth()` and redirect unauthenticated users to the landing page.
+- **OAuth callback** — [app/auth/callback/route.ts](frontend/app/auth/callback/route.ts) handles the OAuth redirect after Google or GitHub sign-in, exchanging the code for a session.
+
+### OAuth Providers
+
+| Provider | Scopes         |
+| -------- | -------------- |
+| Google   | email, profile |
+| GitHub   | user:email     |
+
+Email/password sign-up is also supported as a fallback.
+
+---
+
+## Deployment
+
+### Architecture
+
+```
+┌──────────────┐     ┌──────────────────┐     ┌──────────────────┐
+│   GitHub     │────>│   GitHub Actions  │────>│    AWS ECR       │
+│   (push to   │     │   (build & push   │     │  (Docker image   │
+│    main)     │     │    Docker image)  │     │   registry)      │
+└──────────────┘     └──────────────────┘     └────────┬─────────┘
+                                                       │
+                                                       v
+┌──────────────┐                              ┌──────────────────┐
+│   Vercel     │                              │  AWS App Runner  │
+│  (Frontend)  │─────────── API calls ───────>│   (Backend)      │
+└──────────────┘                              └──────────────────┘
+       │                                               │
+       v                                               v
+┌──────────────┐                              ┌──────────────────┐
+│ Supabase Auth│                              │  Supabase DB     │
+│ (OAuth +     │                              │  (PostgreSQL +   │
+│  sessions)   │                              │   pgvector)      │
+└──────────────┘                              └──────────────────┘
+                                                       │
+                                                       v
+                                              ┌──────────────────┐
+                                              │   Neo4j Aura     │
+                                              │ (Knowledge Graph)│
+                                              └──────────────────┘
+```
+
+### Backend (AWS)
+
+- **Container Registry**: AWS ECR (`paper-pulse-api`)
+- **Hosting**: AWS App Runner auto-deploys from the ECR image
+- **CI/CD**: GitHub Actions workflow ([deploy-backend.yml](.github/workflows/deploy-backend.yml)) triggers on pushes to `main` that touch `backend/**`, builds the Docker image, and pushes to ECR
+- **Dockerfile**: Multi-stage build in `backend/Dockerfile`
+
+### Frontend (Vercel)
+
+- Connected directly to the GitHub repository
+- Auto-deploys on push to `main`
+- Environment variables configured in the Vercel dashboard
+
+### Database
+
+- **Supabase**: Managed PostgreSQL with pgvector extension, hosted by Supabase
+- **Neo4j Aura**: Managed graph database with automatic retry logic (3 attempts, exponential backoff) for transient connection failures
 
 ---
 
@@ -641,6 +757,8 @@ erDiagram
 
 ## API Reference
 
+> All endpoints require a valid `Authorization: Bearer <token>` header from Supabase Auth, except where noted.
+
 ### Users
 
 | Method | Path             | Description                                                         |
@@ -708,10 +826,11 @@ erDiagram
 
 ### Pipeline
 
-| Method | Path             | Description                         |
-| ------ | ---------------- | ----------------------------------- |
-| POST   | /pipeline/run    | Manually trigger the daily pipeline |
-| GET    | /pipeline/status | Check pipeline running status       |
+| Method | Path                | Description                                           |
+| ------ | ------------------- | ----------------------------------------------------- |
+| POST   | /pipeline/run       | Manually trigger the daily pipeline (admin only)      |
+| GET    | /pipeline/status    | Check pipeline running status (admin only)            |
+| POST   | /pipeline/bootstrap | Run bootstrap pipeline for a single user (admin only) |
 
 ---
 
@@ -787,6 +906,25 @@ npm run dev
 
 The app will be available at http://localhost:3000.
 
+### Production Deployment
+
+**Backend (AWS)**:
+
+1. Push to `main` with changes in `backend/` — GitHub Actions automatically builds the Docker image and pushes it to AWS ECR
+2. AWS App Runner detects the new image and redeploys automatically
+3. Set all backend environment variables in the App Runner service configuration
+
+**Frontend (Vercel)**:
+
+1. Connect the repository to Vercel
+2. Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_API_URL` in the Vercel dashboard
+3. Pushes to `main` auto-deploy
+
+**Auth**:
+
+1. Configure Google and GitHub OAuth providers in the Supabase dashboard
+2. Set the redirect URL to `https://<your-frontend-domain>/auth/callback`
+
 ---
 
 ## Environment Variables
@@ -806,6 +944,7 @@ The app will be available at http://localhost:3000.
 | SEMANTIC_SCHOLAR_API_KEY | No       | Semantic Scholar API key for higher rate limits          |
 | NCBI_API_KEY             | No       | PubMed API key for higher rate limits                    |
 | OPENALEX_MAILTO          | No       | Email for OpenAlex polite pool                           |
+| ADMIN_API_KEY            | Prod     | Shared secret for admin-only endpoints                   |
 
 ### Frontend
 
@@ -821,13 +960,18 @@ The app will be available at http://localhost:3000.
 
 ```
 paper-pulse/
+    .github/
+        workflows/
+            deploy-backend.yml              CI/CD: build and push Docker image to ECR
     backend/
         run.py                              Server entry point
         requirements.txt                    Python dependencies
+        Dockerfile                          Container build for AWS deployment
         app/
             main.py                         FastAPI app with lifespan and scheduler
             database.py                     Supabase client initialization
             models.py                       Pydantic request and response models
+            auth.py                         JWT auth, ownership checks, admin gate
             routers/
                 users.py                    User registration and profiles
                 feed.py                     Paper feed and bookmarks
@@ -835,7 +979,7 @@ paper-pulse/
                 ask.py                      Q&A with hybrid retrieval and SSE streaming
                 chats.py                    Chat CRUD and message persistence
                 graph.py                    Knowledge graph queries and synthesis
-                pipeline.py                Manual pipeline trigger
+                pipeline.py                Manual pipeline trigger and bootstrap
             services/
                 openai_service.py           GPT-4.1, o4-mini, embeddings, Whisper calls
                 pipeline_service.py         Daily ingestion pipeline orchestration
@@ -856,10 +1000,13 @@ paper-pulse/
     frontend/
         package.json                        Node dependencies
         next.config.ts                      Next.js configuration
+        proxy.ts                            Supabase session refresh middleware
         app/
             layout.tsx                      Root layout with Supabase AuthProvider
             page.tsx                        Landing page
             globals.css                     Global styles
+            auth/
+                callback/route.ts           OAuth callback handler
             onboarding/page.tsx             Domain selection and interest input
             feed/page.tsx                   Daily paper feed with date grouping
             saved/page.tsx                  Saved papers view
@@ -879,5 +1026,6 @@ paper-pulse/
                 server.ts                   Server-side Supabase client
                 middleware.ts               Session refresh middleware helper
         lib/
+            api.ts                          authFetch wrapper with JWT injection
             utils.ts                        Tailwind class merge utility
 ```
