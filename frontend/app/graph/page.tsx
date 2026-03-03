@@ -13,6 +13,7 @@ import UserMenu from "@/components/user-menu";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { authFetch } from "@/lib/api";
+import { PageLoader, RedirectLoader } from "@/components/page-loader";
 import dynamic from "next/dynamic";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1064,10 +1065,9 @@ function GraphPageContent() {
 	);
 
 	/* Render */
-	if (!isLoaded) return null;
+	if (!isLoaded) return <PageLoader />;
 	if (!user) {
-		router.push("/sign-in");
-		return null;
+		return <RedirectLoader to="/sign-in" />;
 	}
 
 	const TypeIcon = (type: string) =>

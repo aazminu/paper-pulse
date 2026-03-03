@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { useRouter } from "next/navigation";
 import { authFetch } from "@/lib/api";
+import { PageLoader, RedirectLoader } from "@/components/page-loader";
 import {
 	Card,
 	CardContent,
@@ -86,6 +87,7 @@ export default function OnboardingPage() {
 	const [selectedDomains, setSelectedDomains] = useState<string[]>([]);
 	const [interestText, setInterestText] = useState("");
 	const [isSubmitting, setIsSubmitting] = useState(false);
+	const [isRedirecting, setIsRedirecting] = useState(false);
 
 	const handleDomainToggle = (domainId: string) => {
 		setSelectedDomains((prev) =>
@@ -121,6 +123,7 @@ export default function OnboardingPage() {
 					`${process.env.NEXT_PUBLIC_API_URL}/pipeline/bootstrap/${user.id}`,
 					{ method: "POST" },
 				).catch(() => {});
+				setIsRedirecting(true);
 				router.push("/feed");
 			} else {
 				const errorData = await response.json();
@@ -134,11 +137,11 @@ export default function OnboardingPage() {
 		}
 	};
 
-	if (!isLoaded) return null;
+	if (!isLoaded) return <PageLoader message="Loading..." />;
 	if (!user) {
-		router.push("/sign-in");
-		return null;
+		return <RedirectLoader to="/sign-in" />;
 	}
+	if (isRedirecting) return <PageLoader message="Setting up your feed..." />;
 
 	return (
 		<div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-black p-4">

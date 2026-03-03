@@ -6,6 +6,7 @@ import UserMenu from "@/components/user-menu";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { authFetch } from "@/lib/api";
+import { PageLoader, RedirectLoader } from "@/components/page-loader";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import {
@@ -1519,10 +1520,9 @@ function AskPageContent() {
 		}
 	};
 
-	if (!isLoaded) return null;
+	if (!isLoaded) return <PageLoader />;
 	if (!user) {
-		router.push("/sign-in");
-		return null;
+		return <RedirectLoader to="/sign-in" />;
 	}
 
 	/* Grouped chats for sidebar */

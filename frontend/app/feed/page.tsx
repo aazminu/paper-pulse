@@ -6,6 +6,7 @@ import UserMenu from "@/components/user-menu";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authFetch } from "@/lib/api";
+import { PageLoader, RedirectLoader } from "@/components/page-loader";
 import {
 	Card,
 	CardContent,
@@ -226,10 +227,9 @@ export default function FeedPage() {
 		}
 	};
 
-	if (!isLoaded) return null;
+	if (!isLoaded) return <PageLoader />;
 	if (!user) {
-		router.push("/sign-in");
-		return null;
+		return <RedirectLoader to="/sign-in" />;
 	}
 
 	return (
