@@ -18,7 +18,7 @@ export default function Home() {
 					<SignedOut>
 						<Link
 							href="/sign-in"
-							className="flex h-12 w-full sm:w-auto items-center justify-center rounded-full border border-solid border-black/[.08] px-8 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
+							className="flex h-12 w-full sm:w-auto items-center justify-center rounded-full border border-solid border-black/8 px-8 transition-colors hover:border-transparent hover:bg-black/4 dark:border-white/[.145] dark:hover:bg-[#1a1a1a]"
 						>
 							Sign In
 						</Link>

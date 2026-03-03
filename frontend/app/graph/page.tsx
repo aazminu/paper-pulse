@@ -698,7 +698,9 @@ export default function GraphPage() {
 							body: JSON.stringify({ node_ids: cluster.paper_ids }),
 						});
 						if (!res.ok) {
-							setSynthesisReport("Something went wrong starting the deep analysis. Please try again.");
+							setSynthesisReport(
+								"Something went wrong starting the deep analysis. Please try again.",
+							);
 							setSynthesizing(false);
 							return;
 						}
@@ -1192,7 +1194,7 @@ export default function GraphPage() {
 												>
 													{arrow && (
 														<span
-															className="absolute -right-1 top-1/2 -translate-y-1/2 w-0 h-0 border-y-[3px] border-y-transparent border-l-[4px]"
+															className="absolute -right-1 top-1/2 -translate-y-1/2 w-0 h-0 border-y-[3px] border-y-transparent border-l-4"
 															style={{ borderLeftColor: EDGE_COLORS[type] }}
 														/>
 													)}
@@ -1217,7 +1219,8 @@ export default function GraphPage() {
 								>
 									<h3 className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
 										<Layers className="h-3 w-3" />
-										Research Groups {clusters.length > 0 && `(${clusters.length})`}
+										Research Groups{" "}
+										{clusters.length > 0 && `(${clusters.length})`}
 									</h3>
 									<ChevronDown
 										className={`h-3 w-3 text-zinc-400 transition-transform ${clustersExpanded ? "" : "-rotate-90"}`}
@@ -1242,7 +1245,11 @@ export default function GraphPage() {
 													onClick={() => {
 														setHighlightCluster(new Set(cluster.paper_ids));
 														const ids = new Set(cluster.paper_ids);
-														graphRef.current?.zoomToFit(800, 60, (node: { id: string }) => ids.has(node.id));
+														graphRef.current?.zoomToFit(
+															800,
+															60,
+															(node: { id: string }) => ids.has(node.id),
+														);
 													}}
 													onMouseEnter={() =>
 														setHighlightCluster(new Set(cluster.paper_ids))
@@ -1392,7 +1399,7 @@ export default function GraphPage() {
 
 					{/* Graph controls - positioned to dodge the detail panel */}
 					<div
-						className={`absolute top-3 z-30 flex items-center gap-1.5 transition-all ${selectedNode ? "right-[21rem]" : "right-3"}`}
+						className={`absolute top-3 z-30 flex items-center gap-1.5 transition-all ${selectedNode ? "right-84" : "right-3"}`}
 					>
 						{/* Saved reports */}
 						<button
@@ -1418,7 +1425,9 @@ export default function GraphPage() {
 									: "bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 border-zinc-200 dark:border-zinc-700"
 							}`}
 							title={
-								selectMode ? "Done selecting" : "Select papers to generate a review"
+								selectMode
+									? "Done selecting"
+									: "Select papers to generate a review"
 							}
 						>
 							<MousePointerClick className="h-3.5 w-3.5" />
@@ -1472,8 +1481,8 @@ export default function GraphPage() {
 								<Network className="h-12 w-12 text-zinc-300 mx-auto" />
 								<h3 className="text-lg font-medium">No graph data yet</h3>
 								<p className="text-sm text-zinc-500 max-w-md">
-									Your knowledge graph will appear here once papers are
-									fetched. Check your feed to get started.
+									Your knowledge graph will appear here once papers are fetched.
+									Check your feed to get started.
 								</p>
 							</div>
 						</div>
@@ -2072,7 +2081,8 @@ export default function GraphPage() {
 										</h2>
 										<p className="text-xs text-zinc-500">
 											{selectedForSynthesis.size} papers analyzed
-											{reportMode === "agent" && " · AI-powered deep exploration"}
+											{reportMode === "agent" &&
+												" · AI-powered deep exploration"}
 											{reportMode === "publication" && " · citation-ready"}
 										</p>
 									</div>
