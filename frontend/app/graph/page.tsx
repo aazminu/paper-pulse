@@ -37,6 +37,8 @@ import {
 	ChevronDown,
 	BookMarked,
 	Save,
+	GraduationCap,
+	List,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { MermaidRenderer } from "@/components/mermaid-renderer";
@@ -194,6 +196,9 @@ export default function GraphPage() {
 	const [synthesizing, setSynthesizing] = useState(false);
 	const [reportOpen, setReportOpen] = useState(false);
 	const [copied, setCopied] = useState(false);
+	const [reportMode, setReportMode] = useState<"quick" | "publication">("quick");
+	const [bibtexData, setBibtexData] = useState<string | null>(null);
+	const [tocOpen, setTocOpen] = useState(false);
 
 	/* Cluster state */
 	const [clusters, setClusters] = useState<Cluster[]>([]);
@@ -412,8 +417,11 @@ export default function GraphPage() {
 		setSynthesizing(true);
 		setReportOpen(true);
 		setSynthesisReport(null);
+		setBibtexData(null);
+		setTocOpen(false);
+		const endpoint = reportMode === "publication" ? "synthesize-publication" : "synthesize";
 		try {
-			const res = await fetch(`${API}/graph/synthesize`, {
+			const res = await fetch(`${API}/graph/${endpoint}`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ node_ids: Array.from(selectedForSynthesis) }),
@@ -421,6 +429,7 @@ export default function GraphPage() {
 			if (res.ok) {
 				const data = await res.json();
 				setSynthesisReport(data.markdown);
+				if (data.bibtex) setBibtexData(data.bibtex);
 			} else {
 				setSynthesisReport("Error generating report. Please try again.");
 			}
@@ -428,7 +437,7 @@ export default function GraphPage() {
 			setSynthesisReport("Network error. Please check your connection.");
 		}
 		setSynthesizing(false);
-	}, [selectedForSynthesis]);
+	}, [selectedForSynthesis, reportMode]);
 
 	const handleCopyReport = useCallback(() => {
 		if (!synthesisReport) return;
@@ -447,6 +456,17 @@ export default function GraphPage() {
 		a.click();
 		URL.revokeObjectURL(url);
 	}, [synthesisReport]);
+
+	const handleDownloadBibtex = useCallback(() => {
+		if (!bibtexData) return;
+		const blob = new Blob([bibtexData], { type: "application/x-bibtex" });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement("a");
+		a.href = url;
+		a.download = "references.bib";
+		a.click();
+		URL.revokeObjectURL(url);
+	}, [bibtexData]);
 
 	/* ── Export graph as PNG ── */
 	const handleExportImage = useCallback(() => {
@@ -532,7 +552,9 @@ export default function GraphPage() {
 		setSynthesizing(true);
 		setReportOpen(true);
 		setSynthesisReport(null);
-		fetch(`${API}/graph/synthesize`, {
+		setBibtexData(null);
+		const endpoint = reportMode === "publication" ? "synthesize-publication" : "synthesize";
+		fetch(`${API}/graph/${endpoint}`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ node_ids: cluster.paper_ids }),
@@ -541,13 +563,14 @@ export default function GraphPage() {
 				if (res.ok) {
 					const data = await res.json();
 					setSynthesisReport(data.markdown);
+					if (data.bibtex) setBibtexData(data.bibtex);
 				} else {
 					setSynthesisReport("Error generating report. Please try again.");
 				}
 			})
 			.catch(() => setSynthesisReport("Network error. Please check your connection."))
 			.finally(() => setSynthesizing(false));
-	}, []);
+	}, [reportMode]);
 
 	/* ── Toggle helpers ── */
 	const toggleNodeType = useCallback((type: string) => {
@@ -1182,6 +1205,27 @@ export default function GraphPage() {
 									>
 										Clear
 									</button>
+
+									{/* Mode toggle */}
+									<div className="flex items-center rounded-lg border overflow-hidden text-xs">
+										<button
+											onClick={() => setReportMode("quick")}
+											className={`flex items-center gap-1 px-2.5 py-1.5 transition ${reportMode === "quick" ? "bg-amber-500 text-white" : "hover:bg-zinc-100 dark:hover:bg-zinc-800"}`}
+											title="Quick overview with key themes"
+										>
+											<FileText className="h-3 w-3" />
+											Quick
+										</button>
+										<button
+											onClick={() => setReportMode("publication")}
+											className={`flex items-center gap-1 px-2.5 py-1.5 transition ${reportMode === "publication" ? "bg-amber-500 text-white" : "hover:bg-zinc-100 dark:hover:bg-zinc-800"}`}
+											title="Publication-ready multi-section review with BibTeX"
+										>
+											<GraduationCap className="h-3 w-3" />
+											Publication
+										</button>
+									</div>
+
 									<Button
 										onClick={handleSynthesize}
 										disabled={synthesizing}
@@ -1193,7 +1237,7 @@ export default function GraphPage() {
 										) : (
 											<FileText className="h-3.5 w-3.5" />
 										)}
-										Synthesize Report
+										Synthesize
 									</Button>
 								</>
 							)}
@@ -1499,19 +1543,36 @@ export default function GraphPage() {
 							{/* Panel header */}
 							<div className="border-b px-6 py-4 flex items-center justify-between shrink-0">
 								<div className="flex items-center gap-3">
-									<div className="h-9 w-9 rounded-lg bg-amber-100 dark:bg-amber-900 flex items-center justify-center">
-										<FileText className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+									<div className={`h-9 w-9 rounded-lg flex items-center justify-center ${reportMode === "publication" ? "bg-purple-100 dark:bg-purple-900" : "bg-amber-100 dark:bg-amber-900"}`}>
+										{reportMode === "publication"
+											? <GraduationCap className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+											: <FileText className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+										}
 									</div>
 									<div>
-										<h2 className="text-lg font-semibold">Literature Review</h2>
+										<h2 className="text-lg font-semibold">
+											{reportMode === "publication" ? "Publication Review" : "Literature Review"}
+										</h2>
 										<p className="text-xs text-zinc-500">
 											{selectedForSynthesis.size} papers analyzed
+											{reportMode === "publication" && " · publication-ready"}
 										</p>
 									</div>
 								</div>
 								<div className="flex items-center gap-1.5">
 									{synthesisReport && (
 										<>
+											{/* Section nav toggle (publication mode) */}
+											{reportMode === "publication" && (
+												<button
+													onClick={() => setTocOpen((p) => !p)}
+													className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition border ${tocOpen ? "bg-purple-50 dark:bg-purple-950 border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-300" : "hover:bg-zinc-100 dark:hover:bg-zinc-900"}`}
+													title="Table of contents"
+												>
+													<List className="h-3.5 w-3.5" />
+													Sections
+												</button>
+											)}
 											<button
 												onClick={handleSaveReport}
 												disabled={savingReport || reportSaved}
@@ -1535,8 +1596,18 @@ export default function GraphPage() {
 												title="Download as .md file"
 											>
 												<Download className="h-3.5 w-3.5" />
-												Download
+												.md
 											</button>
+											{bibtexData && (
+												<button
+													onClick={handleDownloadBibtex}
+													className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900 transition border"
+													title="Download BibTeX references"
+												>
+													<Download className="h-3.5 w-3.5" />
+													.bib
+												</button>
+											)}
 										</>
 									)}
 									<button
@@ -1549,12 +1620,42 @@ export default function GraphPage() {
 							</div>
 
 							{/* Panel content */}
-							<div className="flex-1 overflow-y-auto">
+							<div className="flex-1 overflow-hidden flex">
+								{/* Section nav sidebar (publication mode) */}
+								{tocOpen && synthesisReport && reportMode === "publication" && (
+									<nav className="w-48 border-r shrink-0 overflow-y-auto py-3 px-2 space-y-0.5">
+										<p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 px-2 mb-2">Contents</p>
+										{synthesisReport.split("\n").filter((l) => /^#{1,3}\s/.test(l)).map((heading, i) => {
+											const level = heading.match(/^(#+)/)?.[1].length || 1;
+											const text = heading.replace(/^#+\s*/, "").replace(/\*\*/g, "");
+											const id = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+											return (
+												<button
+													key={i}
+													onClick={() => {
+														const el = document.getElementById(id);
+														if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+													}}
+													className={`block w-full text-left text-[11px] rounded-md px-2 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition truncate ${level === 1 ? "font-semibold" : level === 2 ? "pl-4 text-zinc-600 dark:text-zinc-400" : "pl-6 text-zinc-500 dark:text-zinc-500 text-[10px]"}`}
+												>
+													{text}
+												</button>
+											);
+										})}
+									</nav>
+								)}
+
+								<div className="flex-1 overflow-y-auto">
 								{synthesizing ? (
 									<div className="p-8 space-y-6">
 										<div className="flex items-center gap-3 text-zinc-500">
 											<Loader2 className="h-5 w-5 animate-spin text-amber-500" />
-											<p className="text-sm font-medium">Analyzing papers and generating review…</p>
+											<p className="text-sm font-medium">
+												{reportMode === "publication"
+													? "Generating publication-ready review (this may take a moment)…"
+													: "Analyzing papers and generating review…"
+												}
+											</p>
 										</div>
 										{/* Skeleton shimmer */}
 										<div className="space-y-4 animate-pulse">
@@ -1574,6 +1675,21 @@ export default function GraphPage() {
 										<article className="prose prose-zinc dark:prose-invert prose-sm max-w-none prose-headings:text-base prose-headings:font-semibold prose-p:leading-relaxed prose-li:leading-relaxed prose-pre:bg-transparent prose-pre:p-0">
 											<ReactMarkdown
 												components={{
+													h1({ children, ...props }) {
+														const text = String(children).replace(/\*\*/g, "");
+														const id = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+														return <h1 id={id} {...props}>{children}</h1>;
+													},
+													h2({ children, ...props }) {
+														const text = String(children).replace(/\*\*/g, "");
+														const id = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+														return <h2 id={id} {...props}>{children}</h2>;
+													},
+													h3({ children, ...props }) {
+														const text = String(children).replace(/\*\*/g, "");
+														const id = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+														return <h3 id={id} {...props}>{children}</h3>;
+													},
 													code({ className, children, ...props }) {
 														const match = /language-(\w+)/.exec(className || "");
 														const codeStr = String(children).replace(/\n$/, "");
@@ -1607,6 +1723,7 @@ export default function GraphPage() {
 										</article>
 									</div>
 								) : null}
+								</div>
 							</div>
 						</div>
 					</div>

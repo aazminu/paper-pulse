@@ -650,3 +650,207 @@ def synthesize_literature_review(subgraph: dict) -> str:
     except Exception as e:
         print(f"Error synthesizing literature review: {e}")
         return "Sorry, I encountered an error while generating the literature review."
+
+
+# ---------------------------------------------------------------------------
+# Publication-Ready Multi-Section Literature Review
+# ---------------------------------------------------------------------------
+
+def _generate_bibtex(papers: list[dict]) -> str:
+    """Generate BibTeX entries from paper metadata."""
+    entries = []
+    for i, p in enumerate(papers):
+        # Build a cite key: first author last name + year + letter
+        authors = p.get("authors", [])
+        first_author_last = authors[0].split()[-1].lower() if authors else "unknown"
+        year = p.get("date", "")[:4] if p.get("date") else "n.d."
+        cite_key = f"{first_author_last}{year}{chr(97 + i)}"
+
+        # Format authors for BibTeX: "Last, First and Last, First"
+        bib_authors = []
+        for a in authors:
+            parts = a.strip().split()
+            if len(parts) >= 2:
+                bib_authors.append(f"{parts[-1]}, {' '.join(parts[:-1])}")
+            else:
+                bib_authors.append(a)
+        author_str = " and ".join(bib_authors) if bib_authors else "Unknown"
+
+        title = p.get("title", "Untitled")
+        url = p.get("url", "")
+        arxiv_id = p.get("arxiv_id", "")
+
+        entry = (
+            f"@article{{{cite_key},\n"
+            f"  title     = {{{title}}},\n"
+            f"  author    = {{{author_str}}},\n"
+            f"  year      = {{{year}}},\n"
+        )
+        if url:
+            entry += f"  url       = {{{url}}},\n"
+        if arxiv_id:
+            entry += f"  eprint    = {{{arxiv_id}}},\n"
+            entry += f"  archivePrefix = {{arXiv}},\n"
+        if p.get("source"):
+            entry += f"  note      = {{Source: {p['source']}}},\n"
+        entry += "}"
+        entries.append((cite_key, entry))
+
+    return entries  # list of (key, bibtex_string)
+
+
+_PUBLICATION_SYSTEM_PROMPT = (
+    "You are an expert academic researcher writing a publication-ready literature "
+    "review. Given a set of papers with metadata, authors, concepts, and citation "
+    "relationships, produce a comprehensive, multi-section review suitable for "
+    "inclusion in an academic publication.\n\n"
+    "You will also receive a CITATION KEYS mapping that maps each paper to a BibTeX "
+    "cite key. USE these keys when referencing papers: write citations in the format "
+    "[AuthorYear] (e.g., [Smith2024a]). Each paper MUST be cited at least once.\n\n"
+    "OUTPUT FORMAT (use exactly these sections in order):\n\n"
+    "# <Descriptive Title for the Review>\n\n"
+    "## Abstract\n"
+    "A 150-200 word structured abstract summarizing the scope, methods covered, "
+    "key findings, and implications of the reviewed literature.\n\n"
+    "## 1. Introduction\n"
+    "2-3 paragraphs establishing the research context, motivation for this review, "
+    "the scope of papers covered, and a brief outline of the review's structure. "
+    "End with a clear statement of the review's objectives.\n\n"
+    "## 2. Background\n"
+    "1-2 paragraphs providing necessary theoretical or technical background for "
+    "readers unfamiliar with the domain. Define key terms and foundational concepts.\n\n"
+    "## 3. Thematic Analysis\n"
+    "The main body. Organize by 2-4 thematic subsections (### 3.1 Theme Name, etc). "
+    "For each theme:\n"
+    "- Identify the research thread and its significance\n"
+    "- Discuss how papers contribute to this thread, citing them as [AuthorYear]\n"
+    "- Compare and contrast approaches, methodologies, and findings\n"
+    "- Note agreements and contradictions between studies\n\n"
+    "## 4. Methodological Overview\n"
+    "A comparative analysis of research methodologies across the reviewed papers. "
+    "Include a Mermaid diagram comparing approaches:\n\n"
+    "```mermaid\n"
+    "flowchart LR\n"
+    "    subgraph Methods\n"
+    "        A[\"Method A\"] --> B[\"Outcome\"]\n"
+    "    end\n"
+    "```\n\n"
+    "## 5. Citation Network\n"
+    "A brief narrative description of how papers reference each other, accompanied "
+    "by a Mermaid citation flow diagram:\n\n"
+    "```mermaid\n"
+    "flowchart TD\n"
+    "    A[\"Paper A\"] --> B[\"Paper B\"]\n"
+    "```\n\n"
+    "Rules for Mermaid diagrams:\n"
+    "- Use single-letter node IDs (A, B, C, ...)\n"
+    "- Short titles (max 40 chars) in double quotes inside brackets\n"
+    "- Only include citation edges from provided data\n"
+    "- If no citations exist, create a concept-relationship diagram instead\n\n"
+    "## 6. Discussion\n"
+    "2-3 paragraphs synthesizing the overall state of the field:\n"
+    "- What has been established?\n"
+    "- What gaps or open questions remain?\n"
+    "- What methodological limitations are common?\n\n"
+    "## 7. Future Directions\n"
+    "3-5 specific, actionable research directions suggested by the gaps identified.\n\n"
+    "## 8. Conclusion\n"
+    "A concise conclusion (1-2 paragraphs) summarizing the key contributions of the "
+    "reviewed body of work and its implications for the field.\n\n"
+    "## References\n"
+    "List all cited papers in this format:\n"
+    "- [CiteKey] Authors. \"Title.\" *Source*, Year. URL\n\n"
+    "FORMATTING RULES:\n"
+    "- Use proper academic tone throughout\n"
+    "- Use **bold** for key terms on first introduction\n"
+    "- Cite papers as [AuthorYear] — EVERY paper must be cited at least once\n"
+    "- No bullet-point lists in the main analysis sections (use flowing prose)\n"
+    "- Target 1500-2500 words total\n"
+    "- Be scholarly, precise, and well-structured\n"
+)
+
+
+def synthesize_publication_review(subgraph: dict) -> dict:
+    """
+    Generate a publication-ready multi-section literature review with BibTeX.
+    Returns {"markdown": str, "bibtex": str, "paper_count": int, "citation_count": int}.
+    """
+    papers = subgraph.get("papers", [])
+    citations = subgraph.get("citations", [])
+
+    if not papers:
+        return {
+            "markdown": "No papers provided for synthesis.",
+            "bibtex": "",
+            "paper_count": 0,
+            "citation_count": 0,
+        }
+
+    # Generate BibTeX entries
+    bib_entries = _generate_bibtex(papers)
+    bibtex_str = "\n\n".join(entry for _, entry in bib_entries)
+
+    # Build cite-key mapping for the LLM
+    cite_key_lines = []
+    for (cite_key, _), p in zip(bib_entries, papers):
+        cite_key_lines.append(f"  [{cite_key}] → \"{p['title']}\"")
+
+    # Build paper descriptions
+    paper_descriptions = []
+    for i, ((cite_key, _), p) in enumerate(zip(bib_entries, papers)):
+        lines = [f"Paper {i+1} [cite as: {cite_key}]: {p['title']}"]
+        if p.get("authors"):
+            lines.append(f"  Authors: {', '.join(p['authors'])}")
+        if p.get("date"):
+            lines.append(f"  Published: {p['date']}")
+        if p.get("source"):
+            lines.append(f"  Source: {p['source']}")
+        if p.get("concepts"):
+            concept_names = [c["name"] for c in p["concepts"] if c.get("name")]
+            if concept_names:
+                lines.append(f"  Key Concepts: {', '.join(concept_names)}")
+        if p.get("url"):
+            lines.append(f"  URL: {p['url']}")
+        lines.append(f"  ArXiv ID: {p['arxiv_id']}")
+        paper_descriptions.append("\n".join(lines))
+
+    # Build citation map
+    citation_lines = []
+    title_map = {p["arxiv_id"]: p["title"] for p in papers}
+    for c in citations:
+        from_title = title_map.get(c["from"], c["from"])
+        to_title = title_map.get(c["to"], c["to"])
+        citation_lines.append(f"  \"{from_title}\" cites \"{to_title}\"")
+
+    user_msg = f"CITATION KEYS:\n" + "\n".join(cite_key_lines)
+    user_msg += f"\n\nPapers ({len(papers)} total):\n\n" + "\n\n".join(paper_descriptions)
+    if citation_lines:
+        user_msg += "\n\nCitation Relationships:\n" + "\n".join(citation_lines)
+    else:
+        user_msg += "\n\nNo direct citation relationships found between these papers."
+
+    try:
+        response = client.chat.completions.create(
+            model=QA_MODEL,
+            messages=[
+                {"role": "system", "content": _PUBLICATION_SYSTEM_PROMPT},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=0.3,
+            max_tokens=8192,
+        )
+        markdown = response.choices[0].message.content.strip()
+        return {
+            "markdown": markdown,
+            "bibtex": bibtex_str,
+            "paper_count": len(papers),
+            "citation_count": len(citations),
+        }
+    except Exception as e:
+        print(f"Error synthesizing publication review: {e}")
+        return {
+            "markdown": "Sorry, I encountered an error while generating the review.",
+            "bibtex": bibtex_str,
+            "paper_count": len(papers),
+            "citation_count": len(citations),
+        }

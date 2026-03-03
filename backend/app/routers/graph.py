@@ -32,7 +32,7 @@ from app.services.neo4j_service import (
     get_subgraph_for_synthesis,
     detect_clusters,
 )
-from app.services.openai_service import synthesize_literature_review
+from app.services.openai_service import synthesize_literature_review, synthesize_publication_review
 from app.database import supabase
 
 router = APIRouter(prefix="/graph", tags=["Knowledge Graph"])
@@ -135,6 +135,22 @@ def synthesize_report(req: SynthesizeRequest):
         "paper_count": len(subgraph["papers"]),
         "citation_count": len(subgraph["citations"]),
     }
+
+
+@router.post("/synthesize-publication")
+def synthesize_publication(req: SynthesizeRequest):
+    """Generate a publication-ready multi-section literature review with BibTeX."""
+    if not req.node_ids:
+        raise HTTPException(status_code=400, detail="No nodes selected")
+    if len(req.node_ids) > 30:
+        raise HTTPException(status_code=400, detail="Too many nodes (max 30)")
+
+    subgraph = get_subgraph_for_synthesis(req.node_ids)
+    if not subgraph["papers"]:
+        raise HTTPException(status_code=404, detail="No papers found for selected nodes")
+
+    result = synthesize_publication_review(subgraph)
+    return result
 
 
 # ── Saved Reports ─────────────────────────────────────────────────────────
