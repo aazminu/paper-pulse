@@ -17,7 +17,10 @@ Endpoints:
   POST /graph/populate                 — Trigger graph population manually
 """
 
+import json as _json
+
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from app.services.neo4j_service import (
     get_paper_graph,
@@ -33,6 +36,7 @@ from app.services.neo4j_service import (
     detect_clusters,
 )
 from app.services.openai_service import synthesize_literature_review, synthesize_publication_review
+from app.services.agent_service import run_agent_traversal
 from app.database import supabase
 
 router = APIRouter(prefix="/graph", tags=["Knowledge Graph"])
@@ -151,6 +155,40 @@ def synthesize_publication(req: SynthesizeRequest):
 
     result = synthesize_publication_review(subgraph)
     return result
+
+
+# ── Agent Traversal (SSE) ────────────────────────────────────────────────
+
+def _sse(event: str, data) -> str:
+    """Format a server-sent event line."""
+    payload = _json.dumps(data) if not isinstance(data, str) else data
+    return f"event: {event}\ndata: {payload}\n\n"
+
+
+@router.post("/agent-synthesize")
+def agent_synthesize(req: SynthesizeRequest):
+    """Stream an agent-driven graph traversal + synthesis via SSE."""
+    if not req.node_ids:
+        raise HTTPException(status_code=400, detail="No nodes selected")
+    if len(req.node_ids) > 30:
+        raise HTTPException(status_code=400, detail="Too many nodes (max 30)")
+
+    def generate():
+        try:
+            for event in run_agent_traversal(req.node_ids):
+                yield _sse(event["event"], event["data"])
+        except Exception as e:
+            yield _sse("error", {"message": str(e)})
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ── Saved Reports ─────────────────────────────────────────────────────────

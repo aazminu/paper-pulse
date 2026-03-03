@@ -39,6 +39,7 @@ import {
 	Save,
 	GraduationCap,
 	List,
+	Brain,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { MermaidRenderer } from "@/components/mermaid-renderer";
@@ -170,7 +171,10 @@ export default function GraphPage() {
 	const containerRef = useRef<HTMLDivElement>(null);
 
 	/* ── State ── */
-	const [graphData, setGraphData] = useState<GraphData>({ nodes: [], edges: [] });
+	const [graphData, setGraphData] = useState<GraphData>({
+		nodes: [],
+		edges: [],
+	});
 	const [stats, setStats] = useState<GraphStats | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
@@ -179,32 +183,52 @@ export default function GraphPage() {
 	const [searchQuery, setSearchQuery] = useState("");
 	const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
 	const [searchOpen, setSearchOpen] = useState(false);
-	const [hiddenNodeTypes, setHiddenNodeTypes] = useState<Set<string>>(new Set());
+	const [hiddenNodeTypes, setHiddenNodeTypes] = useState<Set<string>>(
+		new Set(),
+	);
 	const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
 	const [hoveredNode, setHoveredNode] = useState<string | null>(null);
 	const [highlightNodes, setHighlightNodes] = useState<Set<string>>(new Set());
 	const [showLabels, setShowLabels] = useState(true);
 	const [sidebarOpen, setSidebarOpen] = useState(true);
-	const [hiddenEdgeTypes, setHiddenEdgeTypes] = useState<Set<string>>(new Set());
+	const [hiddenEdgeTypes, setHiddenEdgeTypes] = useState<Set<string>>(
+		new Set(),
+	);
 	const [hiddenNodes, setHiddenNodes] = useState<Set<string>>(new Set());
 
 	/* Synthesize-mode state */
 	const [selectMode, setSelectMode] = useState(false);
-	const [selectedForSynthesis, setSelectedForSynthesis] = useState<Set<string>>(new Set());
+	const [selectedForSynthesis, setSelectedForSynthesis] = useState<Set<string>>(
+		new Set(),
+	);
 	const [synthesisReport, setSynthesisReport] = useState<string | null>(null);
 	const [synthesizing, setSynthesizing] = useState(false);
 	const [reportOpen, setReportOpen] = useState(false);
 	const [copied, setCopied] = useState(false);
-	const [reportMode, setReportMode] = useState<"quick" | "publication">("quick");
+	const [reportMode, setReportMode] = useState<
+		"quick" | "publication" | "agent"
+	>("quick");
 	const [bibtexData, setBibtexData] = useState<string | null>(null);
 	const [tocOpen, setTocOpen] = useState(false);
+
+	/* Agent traversal state */
+	const [agentSteps, setAgentSteps] = useState<
+		{ step: number; action: string; detail: string }[]
+	>([]);
+	const [agentFindings, setAgentFindings] = useState<
+		{ category: string; description: string }[]
+	>([]);
+	const [agentThought, setAgentThought] = useState<string | null>(null);
+	const [streamingText, setStreamingText] = useState("");
 
 	/* Cluster state */
 	const [clusters, setClusters] = useState<Cluster[]>([]);
 	const [clustersLoading, setClustersLoading] = useState(false);
 	const [clustersExpanded, setClustersExpanded] = useState(false);
-	const [highlightCluster, setHighlightCluster] = useState<Set<string> | null>(null);
+	const [highlightCluster, setHighlightCluster] = useState<Set<string> | null>(
+		null,
+	);
 
 	/* Saved reports state */
 	const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
@@ -264,7 +288,9 @@ export default function GraphPage() {
 					const data = await res.json();
 					setClusters(data.clusters || []);
 				}
-			} catch { /* ignore */ }
+			} catch {
+				/* ignore */
+			}
 			setClustersLoading(false);
 		};
 		fetchClusters();
@@ -275,9 +301,13 @@ export default function GraphPage() {
 		if (!user?.id) return;
 		const fetchReports = async () => {
 			try {
-				const res = await fetch(`${API}/graph/reports?user_id=${encodeURIComponent(user.id)}`);
+				const res = await fetch(
+					`${API}/graph/reports?user_id=${encodeURIComponent(user.id)}`,
+				);
 				if (res.ok) setSavedReports(await res.json());
-			} catch { /* ignore */ }
+			} catch {
+				/* ignore */
+			}
 		};
 		fetchReports();
 	}, [user?.id]);
@@ -292,15 +322,21 @@ export default function GraphPage() {
 		}
 		searchTimeoutRef.current = setTimeout(async () => {
 			try {
-				const res = await fetch(`${API}/graph/search?q=${encodeURIComponent(searchQuery)}&limit=10`);
+				const res = await fetch(
+					`${API}/graph/search?q=${encodeURIComponent(searchQuery)}&limit=10`,
+				);
 				if (res.ok) {
 					const data = await res.json();
 					setSearchResults(data.results || []);
 					setSearchOpen(true);
 				}
-			} catch { /* ignore */ }
+			} catch {
+				/* ignore */
+			}
 		}, 300);
-		return () => { if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current); };
+		return () => {
+			if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+		};
 	}, [searchQuery]);
 
 	/* ── Node details fetch ── */
@@ -308,23 +344,30 @@ export default function GraphPage() {
 		setDetailsLoading(true);
 		setNodeDetails(null);
 		try {
-			const res = await fetch(`${API}/graph/node/${encodeURIComponent(node.id)}?node_type=${node.type}`);
+			const res = await fetch(
+				`${API}/graph/node/${encodeURIComponent(node.id)}?node_type=${node.type}`,
+			);
 			if (res.ok) setNodeDetails(await res.json());
-		} catch { /* ignore */ }
+		} catch {
+			/* ignore */
+		}
 		setDetailsLoading(false);
 	}, []);
 
 	/* ── Highlight neighbors on hover ── */
-	const getNeighborIds = useCallback((nodeId: string): Set<string> => {
-		const ids = new Set<string>([nodeId]);
-		graphData.edges.forEach((e) => {
-			const src = getEdgeId(e.source);
-			const tgt = getEdgeId(e.target);
-			if (src === nodeId) ids.add(tgt);
-			if (tgt === nodeId) ids.add(src);
-		});
-		return ids;
-	}, [graphData.edges]);
+	const getNeighborIds = useCallback(
+		(nodeId: string): Set<string> => {
+			const ids = new Set<string>([nodeId]);
+			graphData.edges.forEach((e) => {
+				const src = getEdgeId(e.source);
+				const tgt = getEdgeId(e.target);
+				if (src === nodeId) ids.add(tgt);
+				if (tgt === nodeId) ids.add(src);
+			});
+			return ids;
+		},
+		[graphData.edges],
+	);
 
 	const handleNodeHover = useCallback(
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -395,8 +438,10 @@ export default function GraphPage() {
 	);
 
 	/* ── Graph controls ── */
-	const handleZoomIn = () => graphRef.current?.zoom(graphRef.current.zoom() * 1.5, 400);
-	const handleZoomOut = () => graphRef.current?.zoom(graphRef.current.zoom() / 1.5, 400);
+	const handleZoomIn = () =>
+		graphRef.current?.zoom(graphRef.current.zoom() * 1.5, 400);
+	const handleZoomOut = () =>
+		graphRef.current?.zoom(graphRef.current.zoom() / 1.5, 400);
 	const handleReset = () => {
 		graphRef.current?.zoomToFit(400, 60);
 		setSelectedNode(null);
@@ -419,7 +464,88 @@ export default function GraphPage() {
 		setSynthesisReport(null);
 		setBibtexData(null);
 		setTocOpen(false);
-		const endpoint = reportMode === "publication" ? "synthesize-publication" : "synthesize";
+		setAgentSteps([]);
+		setAgentFindings([]);
+		setAgentThought(null);
+		setStreamingText("");
+
+		if (reportMode === "agent") {
+			// SSE streaming agent traversal
+			try {
+				const res = await fetch(`${API}/graph/agent-synthesize`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ node_ids: Array.from(selectedForSynthesis) }),
+				});
+				if (!res.ok) {
+					setSynthesisReport(
+						"Error starting agent traversal. Please try again.",
+					);
+					setSynthesizing(false);
+					return;
+				}
+				const reader = res.body?.getReader();
+				if (!reader) {
+					setSynthesisReport("No response body.");
+					setSynthesizing(false);
+					return;
+				}
+				const decoder = new TextDecoder();
+				let buf = "";
+				let fullText = "";
+
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+					buf += decoder.decode(value, { stream: true });
+					const parts = buf.split("\n\n");
+					buf = parts.pop() || "";
+					for (const part of parts) {
+						const lines = part.split("\n");
+						let eventType = "";
+						let dataStr = "";
+						for (const line of lines) {
+							if (line.startsWith("event: ")) eventType = line.slice(7);
+							else if (line.startsWith("data: ")) dataStr = line.slice(6);
+						}
+						if (!eventType || !dataStr) continue;
+						try {
+							const data = JSON.parse(dataStr);
+							switch (eventType) {
+								case "step":
+									setAgentSteps((prev) => [...prev, data]);
+									break;
+								case "finding":
+									setAgentFindings((prev) => [...prev, data]);
+									break;
+								case "thought":
+									setAgentThought(data.content);
+									break;
+								case "token":
+									fullText += data.t;
+									setStreamingText(fullText);
+									break;
+								case "done":
+									setSynthesisReport(data.markdown);
+									break;
+								case "error":
+									setSynthesisReport(`Error: ${data.message}`);
+									break;
+							}
+						} catch {
+							/* ignore parse errors */
+						}
+					}
+				}
+			} catch {
+				setSynthesisReport("Network error. Please check your connection.");
+			}
+			setSynthesizing(false);
+			return;
+		}
+
+		const endpoint =
+			reportMode === "publication" ? "synthesize-publication" : "synthesize";
 		try {
 			const res = await fetch(`${API}/graph/${endpoint}`, {
 				method: "POST",
@@ -471,7 +597,9 @@ export default function GraphPage() {
 	/* ── Export graph as PNG ── */
 	const handleExportImage = useCallback(() => {
 		if (!graphRef.current) return;
-		const canvas = (containerRef.current?.querySelector("canvas") as HTMLCanvasElement) || null;
+		const canvas =
+			(containerRef.current?.querySelector("canvas") as HTMLCanvasElement) ||
+			null;
 		if (!canvas) return;
 		const url = canvas.toDataURL("image/png");
 		const a = document.createElement("a");
@@ -486,7 +614,8 @@ export default function GraphPage() {
 		setSavingReport(true);
 		try {
 			const titleMatch = synthesisReport.match(/^#\s+(.+)$/m);
-			const title = titleMatch?.[1] || `Report — ${selectedForSynthesis.size} papers`;
+			const title =
+				titleMatch?.[1] || `Report — ${selectedForSynthesis.size} papers`;
 			const res = await fetch(`${API}/graph/reports`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
@@ -505,7 +634,9 @@ export default function GraphPage() {
 				setReportSaved(true);
 				setTimeout(() => setReportSaved(false), 2500);
 			}
-		} catch { /* ignore */ }
+		} catch {
+			/* ignore */
+		}
 		setSavingReport(false);
 	}, [synthesisReport, user?.id, selectedForSynthesis]);
 
@@ -514,7 +645,9 @@ export default function GraphPage() {
 		try {
 			await fetch(`${API}/graph/reports/${reportId}`, { method: "DELETE" });
 			setSavedReports((prev) => prev.filter((r) => r.id !== reportId));
-		} catch { /* ignore */ }
+		} catch {
+			/* ignore */
+		}
 	}, []);
 
 	/* ── Re-save a viewed report ── */
@@ -539,38 +672,124 @@ export default function GraphPage() {
 				setSavedReports((prev) => [saved, ...prev]);
 				setViewingReport(saved);
 			}
-		} catch { /* ignore */ }
+		} catch {
+			/* ignore */
+		}
 		setSavingReport(false);
 	}, [viewingReport, user?.id]);
 
 	/* ── Synthesize a cluster ── */
-	const handleSynthesizeCluster = useCallback((cluster: Cluster) => {
-		setSelectedForSynthesis(new Set(cluster.paper_ids));
-		setSelectMode(false);
-		setHighlightCluster(null);
-		// Trigger synthesis immediately
-		setSynthesizing(true);
-		setReportOpen(true);
-		setSynthesisReport(null);
-		setBibtexData(null);
-		const endpoint = reportMode === "publication" ? "synthesize-publication" : "synthesize";
-		fetch(`${API}/graph/${endpoint}`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ node_ids: cluster.paper_ids }),
-		})
-			.then(async (res) => {
-				if (res.ok) {
-					const data = await res.json();
-					setSynthesisReport(data.markdown);
-					if (data.bibtex) setBibtexData(data.bibtex);
-				} else {
-					setSynthesisReport("Error generating report. Please try again.");
-				}
+	const handleSynthesizeCluster = useCallback(
+		(cluster: Cluster) => {
+			setSelectedForSynthesis(new Set(cluster.paper_ids));
+			setSelectMode(false);
+			setHighlightCluster(null);
+			setSynthesizing(true);
+			setReportOpen(true);
+			setSynthesisReport(null);
+			setBibtexData(null);
+			setAgentSteps([]);
+			setAgentFindings([]);
+			setAgentThought(null);
+			setStreamingText("");
+
+			if (reportMode === "agent") {
+				// For agent mode, delegate to the SSE streaming handler
+				(async () => {
+					try {
+						const res = await fetch(`${API}/graph/agent-synthesize`, {
+							method: "POST",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify({ node_ids: cluster.paper_ids }),
+						});
+						if (!res.ok) {
+							setSynthesisReport("Error starting agent traversal.");
+							setSynthesizing(false);
+							return;
+						}
+						const reader = res.body?.getReader();
+						if (!reader) {
+							setSynthesisReport("No response body.");
+							setSynthesizing(false);
+							return;
+						}
+						const decoder = new TextDecoder();
+						let buf = "";
+						let fullText = "";
+						while (true) {
+							const { done, value } = await reader.read();
+							if (done) break;
+							buf += decoder.decode(value, { stream: true });
+							const parts = buf.split("\n\n");
+							buf = parts.pop() || "";
+							for (const part of parts) {
+								const lines = part.split("\n");
+								let eventType = "";
+								let dataStr = "";
+								for (const line of lines) {
+									if (line.startsWith("event: ")) eventType = line.slice(7);
+									else if (line.startsWith("data: ")) dataStr = line.slice(6);
+								}
+								if (!eventType || !dataStr) continue;
+								try {
+									const data = JSON.parse(dataStr);
+									switch (eventType) {
+										case "step":
+											setAgentSteps((prev) => [...prev, data]);
+											break;
+										case "finding":
+											setAgentFindings((prev) => [...prev, data]);
+											break;
+										case "thought":
+											setAgentThought(data.content);
+											break;
+										case "token":
+											fullText += data.t;
+											setStreamingText(fullText);
+											break;
+										case "done":
+											setSynthesisReport(data.markdown);
+											break;
+										case "error":
+											setSynthesisReport(`Error: ${data.message}`);
+											break;
+									}
+								} catch {
+									/* ignore */
+								}
+							}
+						}
+					} catch {
+						setSynthesisReport("Network error. Please check your connection.");
+					}
+					setSynthesizing(false);
+				})();
+				return;
+			}
+
+			const endpoint =
+				reportMode === "publication" ? "synthesize-publication" : "synthesize";
+			fetch(`${API}/graph/${endpoint}`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ node_ids: cluster.paper_ids }),
 			})
-			.catch(() => setSynthesisReport("Network error. Please check your connection."))
-			.finally(() => setSynthesizing(false));
-	}, [reportMode]);
+				.then(async (res) => {
+					if (res.ok) {
+						const data = await res.json();
+						setSynthesisReport(data.markdown);
+						if (data.bibtex) setBibtexData(data.bibtex);
+					} else {
+						setSynthesisReport("Error generating report. Please try again.");
+					}
+				})
+				.catch(() =>
+					setSynthesisReport("Network error. Please check your connection."),
+				)
+				.finally(() => setSynthesizing(false));
+		},
+		[reportMode],
+	);
 
 	/* ── Toggle helpers ── */
 	const toggleNodeType = useCallback((type: string) => {
@@ -605,7 +824,10 @@ export default function GraphPage() {
 
 	const clearHiddenNodes = useCallback(() => setHiddenNodes(new Set()), []);
 
-	const hasActiveFilters = hiddenNodeTypes.size > 0 || hiddenEdgeTypes.size > 0 || hiddenNodes.size > 0;
+	const hasActiveFilters =
+		hiddenNodeTypes.size > 0 ||
+		hiddenEdgeTypes.size > 0 ||
+		hiddenNodes.size > 0;
 
 	/* ── Filtered data ── */
 	const filteredData = useMemo(() => {
@@ -625,7 +847,8 @@ export default function GraphPage() {
 		// Ensure edges connect visible nodes only
 		const nodeIds = new Set(nodes.map((n) => n.id));
 		edges = edges.filter(
-			(e) => nodeIds.has(getEdgeId(e.source)) && nodeIds.has(getEdgeId(e.target)),
+			(e) =>
+				nodeIds.has(getEdgeId(e.source)) && nodeIds.has(getEdgeId(e.target)),
 		);
 
 		// Hidden edge types
@@ -644,20 +867,34 @@ export default function GraphPage() {
 			const isSelected = selectedNode?.id === n.id;
 			const isHovered = hoveredNode === n.id;
 			const isClusterDimmed = highlightCluster && !highlightCluster.has(n.id);
-			const isDimmed = (hoveredNode && !highlightNodes.has(n.id)) || isClusterDimmed;
+			const isDimmed =
+				(hoveredNode && !highlightNodes.has(n.id)) || isClusterDimmed;
 			const isMarkedForSynthesis = selectMode && selectedForSynthesis.has(n.id);
-			const isClusterHighlighted = highlightCluster && highlightCluster.has(n.id);
+			const isClusterHighlighted =
+				highlightCluster && highlightCluster.has(n.id);
 
 			const baseSize = n.type === "paper" ? 5 : n.type === "author" ? 4 : 3.5;
-			const size = isSelected ? baseSize * 2 : isHovered ? baseSize * 1.6 : isClusterHighlighted ? baseSize * 1.3 : isMarkedForSynthesis ? baseSize * 1.4 : baseSize;
+			const size = isSelected
+				? baseSize * 2
+				: isHovered
+					? baseSize * 1.6
+					: isClusterHighlighted
+						? baseSize * 1.3
+						: isMarkedForSynthesis
+							? baseSize * 1.4
+							: baseSize;
 
 			// Glow effect
 			if (isSelected || isHovered) {
 				ctx.beginPath();
 				ctx.arc(node.x!, node.y!, size + 4, 0, 2 * Math.PI);
 				const gradient = ctx.createRadialGradient(
-					node.x!, node.y!, size,
-					node.x!, node.y!, size + 4,
+					node.x!,
+					node.y!,
+					size,
+					node.x!,
+					node.y!,
+					size + 4,
 				);
 				const color = NODE_COLORS[n.type] || "#666";
 				gradient.addColorStop(0, color + "60");
@@ -670,8 +907,8 @@ export default function GraphPage() {
 			ctx.beginPath();
 			ctx.arc(node.x!, node.y!, size, 0, 2 * Math.PI);
 			ctx.fillStyle = isDimmed
-				? (NODE_COLORS_DIM[n.type] || "#66666644")
-				: (NODE_COLORS[n.type] || "#666");
+				? NODE_COLORS_DIM[n.type] || "#66666644"
+				: NODE_COLORS[n.type] || "#666";
 			ctx.fill();
 
 			// Selected ring
@@ -702,8 +939,12 @@ export default function GraphPage() {
 			if (showLabels && (globalScale > 1.5 || isSelected || isHovered)) {
 				const label = n.label || n.id;
 				const maxLen = isSelected || isHovered ? 50 : 25;
-				const displayLabel = label.length > maxLen ? label.slice(0, maxLen) + "…" : label;
-				const fontSize = Math.max((isSelected || isHovered ? 12 : 10) / globalScale, 1.5);
+				const displayLabel =
+					label.length > maxLen ? label.slice(0, maxLen) + "…" : label;
+				const fontSize = Math.max(
+					(isSelected || isHovered ? 12 : 10) / globalScale,
+					1.5,
+				);
 				ctx.font = `${isSelected || isHovered ? "600" : "400"} ${fontSize}px Inter, system-ui, sans-serif`;
 				ctx.textAlign = "center";
 				ctx.textBaseline = "top";
@@ -720,19 +961,26 @@ export default function GraphPage() {
 					fontSize + padding * 2,
 				);
 
-				ctx.fillStyle = isDimmed
-					? "#99999944"
-					: isDark ? "#e4e4e7" : "#27272a";
+				ctx.fillStyle = isDimmed ? "#99999944" : isDark ? "#e4e4e7" : "#27272a";
 				ctx.fillText(displayLabel, node.x!, node.y! + size + 1 + padding);
 			}
 		},
-		[selectedNode, hoveredNode, highlightNodes, highlightCluster, showLabels, selectMode, selectedForSynthesis],
+		[
+			selectedNode,
+			hoveredNode,
+			highlightNodes,
+			highlightCluster,
+			showLabels,
+			selectMode,
+			selectedForSynthesis,
+		],
 	);
 
 	/* ── Render ── */
 	if (!isLoaded) return null;
 
-	const TypeIcon = (type: string) => TYPE_ICONS[type as keyof typeof TYPE_ICONS] || BookOpen;
+	const TypeIcon = (type: string) =>
+		TYPE_ICONS[type as keyof typeof TYPE_ICONS] || BookOpen;
 
 	return (
 		<div className="flex flex-col bg-zinc-50 dark:bg-black h-screen w-full overflow-hidden">
@@ -741,10 +989,27 @@ export default function GraphPage() {
 				<div className="flex items-center gap-4 sm:gap-6">
 					<h1 className="text-xl font-bold tracking-tight">PaperPulse</h1>
 					<nav className="hidden sm:flex gap-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">
-						<Link href="/feed" className="hover:text-black dark:hover:text-white transition">Daily Feed</Link>
-						<Link href="/saved" className="hover:text-black dark:hover:text-white transition">Saved</Link>
-						<Link href="/ask" className="hover:text-black dark:hover:text-white transition">Ask AI</Link>
-						<Link href="/graph" className="text-black dark:text-white">Knowledge Graph</Link>
+						<Link
+							href="/feed"
+							className="hover:text-black dark:hover:text-white transition"
+						>
+							Daily Feed
+						</Link>
+						<Link
+							href="/saved"
+							className="hover:text-black dark:hover:text-white transition"
+						>
+							Saved
+						</Link>
+						<Link
+							href="/ask"
+							className="hover:text-black dark:hover:text-white transition"
+						>
+							Ask AI
+						</Link>
+						<Link href="/graph" className="text-black dark:text-white">
+							Knowledge Graph
+						</Link>
 					</nav>
 				</div>
 				<div className="flex items-center gap-3">
@@ -761,7 +1026,12 @@ export default function GraphPage() {
 								className="w-48 sm:w-64 bg-transparent text-sm placeholder:text-zinc-400 focus:outline-none"
 							/>
 							{searchQuery && (
-								<button onClick={() => { setSearchQuery(""); setSearchOpen(false); }}>
+								<button
+									onClick={() => {
+										setSearchQuery("");
+										setSearchOpen(false);
+									}}
+								>
 									<X className="h-3.5 w-3.5 text-zinc-400 hover:text-zinc-600" />
 								</button>
 							)}
@@ -781,11 +1051,19 @@ export default function GraphPage() {
 												className="h-6 w-6 rounded-full flex items-center justify-center shrink-0"
 												style={{ backgroundColor: NODE_COLORS[r.type] + "20" }}
 											>
-												<Icon className="h-3.5 w-3.5" style={{ color: NODE_COLORS[r.type] }} />
+												<Icon
+													className="h-3.5 w-3.5"
+													style={{ color: NODE_COLORS[r.type] }}
+												/>
 											</div>
 											<div className="min-w-0">
-												<p className="text-sm font-medium truncate">{r.label}</p>
-												<p className="text-[10px] text-zinc-400 capitalize">{r.type}{r.category ? ` · ${r.category}` : ""}</p>
+												<p className="text-sm font-medium truncate">
+													{r.label}
+												</p>
+												<p className="text-[10px] text-zinc-400 capitalize">
+													{r.type}
+													{r.category ? ` · ${r.category}` : ""}
+												</p>
 											</div>
 										</button>
 									);
@@ -814,21 +1092,35 @@ export default function GraphPage() {
 										{[
 											{ n: stats.papers, l: "Papers", c: NODE_COLORS.paper },
 											{ n: stats.authors, l: "Authors", c: NODE_COLORS.author },
-											{ n: stats.concepts, l: "Concepts", c: NODE_COLORS.concept },
+											{
+												n: stats.concepts,
+												l: "Concepts",
+												c: NODE_COLORS.concept,
+											},
 										].map(({ n, l, c }) => (
-											<div key={l} className="text-center p-2 rounded-lg" style={{ backgroundColor: c + "10" }}>
-												<p className="text-lg font-bold" style={{ color: c }}>{n}</p>
+											<div
+												key={l}
+												className="text-center p-2 rounded-lg"
+												style={{ backgroundColor: c + "10" }}
+											>
+												<p className="text-lg font-bold" style={{ color: c }}>
+													{n}
+												</p>
 												<p className="text-[9px] text-zinc-500">{l}</p>
 											</div>
 										))}
 									</div>
 									<div className="grid grid-cols-2 gap-1.5 mt-1.5">
 										<div className="text-center p-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-900">
-											<p className="text-sm font-bold text-zinc-600 dark:text-zinc-300">{stats.citations}</p>
+											<p className="text-sm font-bold text-zinc-600 dark:text-zinc-300">
+												{stats.citations}
+											</p>
 											<p className="text-[9px] text-zinc-500">Citations</p>
 										</div>
 										<div className="text-center p-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-900">
-											<p className="text-sm font-bold text-zinc-600 dark:text-zinc-300">{stats.authorships}</p>
+											<p className="text-sm font-bold text-zinc-600 dark:text-zinc-300">
+												{stats.authorships}
+											</p>
 											<p className="text-[9px] text-zinc-500">Authorships</p>
 										</div>
 									</div>
@@ -842,9 +1134,24 @@ export default function GraphPage() {
 								</h3>
 								<div className="space-y-0.5">
 									{[
-										{ type: "paper", label: "Papers", count: graphData.nodes.filter((n) => n.type === "paper").length },
-										{ type: "author", label: "Authors", count: graphData.nodes.filter((n) => n.type === "author").length },
-										{ type: "concept", label: "Concepts", count: graphData.nodes.filter((n) => n.type === "concept").length },
+										{
+											type: "paper",
+											label: "Papers",
+											count: graphData.nodes.filter((n) => n.type === "paper")
+												.length,
+										},
+										{
+											type: "author",
+											label: "Authors",
+											count: graphData.nodes.filter((n) => n.type === "author")
+												.length,
+										},
+										{
+											type: "concept",
+											label: "Concepts",
+											count: graphData.nodes.filter((n) => n.type === "concept")
+												.length,
+										},
 									].map(({ type, label, count }) => {
 										const hidden = hiddenNodeTypes.has(type);
 										return (
@@ -857,10 +1164,17 @@ export default function GraphPage() {
 														: "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
 												}`}
 											>
-												<span className={`w-3 h-3 rounded-full shrink-0 ${hidden ? "opacity-30" : ""}`} style={{ backgroundColor: NODE_COLORS[type] }} />
+												<span
+													className={`w-3 h-3 rounded-full shrink-0 ${hidden ? "opacity-30" : ""}`}
+													style={{ backgroundColor: NODE_COLORS[type] }}
+												/>
 												<span className="flex-1 text-left">{label}</span>
 												<span className="text-[10px] opacity-50">{count}</span>
-												{hidden ? <EyeOff className="h-3 w-3 shrink-0" /> : <Eye className="h-3 w-3 shrink-0 opacity-40" />}
+												{hidden ? (
+													<EyeOff className="h-3 w-3 shrink-0" />
+												) : (
+													<Eye className="h-3 w-3 shrink-0 opacity-40" />
+												)}
 											</button>
 										);
 									})}
@@ -889,11 +1203,23 @@ export default function GraphPage() {
 														: "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
 												}`}
 											>
-												<span className={`w-4 h-0.5 inline-block rounded relative shrink-0 ${hidden ? "opacity-30" : ""}`} style={{ backgroundColor: EDGE_COLORS[type] }}>
-													{arrow && <span className="absolute -right-1 top-1/2 -translate-y-1/2 w-0 h-0 border-y-[3px] border-y-transparent border-l-[4px]" style={{ borderLeftColor: EDGE_COLORS[type] }} />}
+												<span
+													className={`w-4 h-0.5 inline-block rounded relative shrink-0 ${hidden ? "opacity-30" : ""}`}
+													style={{ backgroundColor: EDGE_COLORS[type] }}
+												>
+													{arrow && (
+														<span
+															className="absolute -right-1 top-1/2 -translate-y-1/2 w-0 h-0 border-y-[3px] border-y-transparent border-l-[4px]"
+															style={{ borderLeftColor: EDGE_COLORS[type] }}
+														/>
+													)}
 												</span>
 												<span className="flex-1 text-left">{label}</span>
-												{hidden ? <EyeOff className="h-3 w-3 shrink-0" /> : <Eye className="h-3 w-3 shrink-0 opacity-40" />}
+												{hidden ? (
+													<EyeOff className="h-3 w-3 shrink-0" />
+												) : (
+													<Eye className="h-3 w-3 shrink-0 opacity-40" />
+												)}
 											</button>
 										);
 									})}
@@ -910,7 +1236,9 @@ export default function GraphPage() {
 										<Layers className="h-3 w-3" />
 										Clusters {clusters.length > 0 && `(${clusters.length})`}
 									</h3>
-									<ChevronDown className={`h-3 w-3 text-zinc-400 transition-transform ${clustersExpanded ? "" : "-rotate-90"}`} />
+									<ChevronDown
+										className={`h-3 w-3 text-zinc-400 transition-transform ${clustersExpanded ? "" : "-rotate-90"}`}
+									/>
 								</button>
 								{clustersExpanded && (
 									<div className="space-y-1.5 max-h-64 overflow-y-auto">
@@ -920,24 +1248,38 @@ export default function GraphPage() {
 												Detecting clusters…
 											</div>
 										) : clusters.length === 0 ? (
-											<p className="text-[10px] text-zinc-400 py-1">No clusters found</p>
+											<p className="text-[10px] text-zinc-400 py-1">
+												No clusters found
+											</p>
 										) : (
 											clusters.map((cluster) => (
 												<div
 													key={cluster.id}
-													className="rounded-lg border bg-zinc-50 dark:bg-zinc-900 p-2 space-y-1.5 hover:border-blue-300 dark:hover:border-blue-700 transition"
-													onMouseEnter={() => setHighlightCluster(new Set(cluster.paper_ids))}
+													className="rounded-lg border bg-zinc-50 dark:bg-zinc-900 p-2 space-y-1.5 hover:border-blue-300 dark:hover:border-blue-700 transition cursor-pointer"
+													onClick={() => {
+														setHighlightCluster(new Set(cluster.paper_ids));
+														const ids = new Set(cluster.paper_ids);
+														graphRef.current?.zoomToFit(800, 60, (node: { id: string }) => ids.has(node.id));
+													}}
+													onMouseEnter={() =>
+														setHighlightCluster(new Set(cluster.paper_ids))
+													}
 													onMouseLeave={() => setHighlightCluster(null)}
 												>
 													<div className="flex items-center justify-between">
-														<p className="text-xs font-medium truncate flex-1">{cluster.label}</p>
+														<p className="text-xs font-medium truncate flex-1">
+															{cluster.label}
+														</p>
 														<Badge className="text-[9px] px-1.5 py-0 shrink-0 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">
 															{cluster.size}
 														</Badge>
 													</div>
 													<div className="flex flex-wrap gap-1">
 														{cluster.top_concepts.slice(0, 3).map((c, i) => (
-															<span key={i} className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+															<span
+																key={i}
+																className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
+															>
 																{c}
 															</span>
 														))}
@@ -983,8 +1325,16 @@ export default function GraphPage() {
 													onClick={() => toggleHiddenNode(id)}
 													className="w-full flex items-center gap-1.5 text-[10px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 py-1 px-2 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 transition group"
 												>
-													<span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: NODE_COLORS[node?.type || "paper"] + "60" }} />
-													<span className="truncate flex-1 text-left">{node?.label || id}</span>
+													<span
+														className="w-2 h-2 rounded-full shrink-0"
+														style={{
+															backgroundColor:
+																NODE_COLORS[node?.type || "paper"] + "60",
+														}}
+													/>
+													<span className="truncate flex-1 text-left">
+														{node?.label || id}
+													</span>
 													<Eye className="h-2.5 w-2.5 shrink-0 opacity-0 group-hover:opacity-100 transition" />
 												</button>
 											);
@@ -1002,8 +1352,14 @@ export default function GraphPage() {
 									{(["paper", "author", "concept"] as const).map((type) => {
 										const Icon = TYPE_ICONS[type];
 										return (
-											<div key={type} className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
-												<span className="w-3 h-3 rounded-full" style={{ backgroundColor: NODE_COLORS[type] }} />
+											<div
+												key={type}
+												className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400"
+											>
+												<span
+													className="w-3 h-3 rounded-full"
+													style={{ backgroundColor: NODE_COLORS[type] }}
+												/>
 												<Icon className="h-3 w-3 opacity-50" />
 												<span className="capitalize">{type}</span>
 											</div>
@@ -1022,7 +1378,11 @@ export default function GraphPage() {
 										onClick={() => setShowLabels((p) => !p)}
 										className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 transition py-1"
 									>
-										{showLabels ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+										{showLabels ? (
+											<Eye className="h-3.5 w-3.5" />
+										) : (
+											<EyeOff className="h-3.5 w-3.5" />
+										)}
 										{showLabels ? "Hide" : "Show"} Labels
 									</button>
 								</div>
@@ -1032,18 +1392,25 @@ export default function GraphPage() {
 				)}
 
 				{/* ── Graph Canvas ── */}
-				<main ref={containerRef} className="flex-1 relative min-h-0 min-w-0 overflow-hidden">
+				<main
+					ref={containerRef}
+					className="flex-1 relative min-h-0 min-w-0 overflow-hidden"
+				>
 					{/* Toggle sidebar */}
 					<button
 						onClick={() => setSidebarOpen((p) => !p)}
 						className="absolute top-3 left-3 z-10 bg-white dark:bg-zinc-900 rounded-lg p-1.5 border shadow-sm hover:bg-zinc-50 dark:hover:bg-zinc-800 transition"
 						title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
 					>
-						<ChevronRight className={`h-4 w-4 transition-transform ${sidebarOpen ? "rotate-180" : ""}`} />
+						<ChevronRight
+							className={`h-4 w-4 transition-transform ${sidebarOpen ? "rotate-180" : ""}`}
+						/>
 					</button>
 
 					{/* Graph controls — positioned to dodge the detail panel */}
-					<div className={`absolute top-3 z-30 flex items-center gap-1.5 transition-all ${selectedNode ? "right-[21rem]" : "right-3"}`}>
+					<div
+						className={`absolute top-3 z-30 flex items-center gap-1.5 transition-all ${selectedNode ? "right-[21rem]" : "right-3"}`}
+					>
 						{/* Saved reports */}
 						<button
 							onClick={() => setReportsOpen(true)}
@@ -1067,23 +1434,41 @@ export default function GraphPage() {
 									? "bg-amber-500 text-white border-amber-600 shadow-amber-200 dark:shadow-amber-900"
 									: "bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 border-zinc-200 dark:border-zinc-700"
 							}`}
-							title={selectMode ? "Exit select mode" : "Select papers to synthesize"}
+							title={
+								selectMode ? "Exit select mode" : "Select papers to synthesize"
+							}
 						>
 							<MousePointerClick className="h-3.5 w-3.5" />
 							{selectMode ? "Selecting…" : "Synthesize"}
 						</button>
 
 						<div className="bg-white dark:bg-zinc-900 rounded-lg border shadow-sm flex items-center">
-							<button onClick={handleZoomIn} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-l-lg transition" title="Zoom in">
+							<button
+								onClick={handleZoomIn}
+								className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-l-lg transition"
+								title="Zoom in"
+							>
 								<ZoomIn className="h-4 w-4" />
 							</button>
-							<button onClick={handleZoomOut} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="Zoom out">
+							<button
+								onClick={handleZoomOut}
+								className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
+								title="Zoom out"
+							>
 								<ZoomOut className="h-4 w-4" />
 							</button>
-							<button onClick={handleReset} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="Fit to view">
+							<button
+								onClick={handleReset}
+								className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
+								title="Fit to view"
+							>
 								<Scan className="h-4 w-4" />
 							</button>
-							<button onClick={handleExportImage} className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-r-lg transition" title="Export as PNG">
+							<button
+								onClick={handleExportImage}
+								className="p-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-r-lg transition"
+								title="Export as PNG"
+							>
 								<Camera className="h-4 w-4" />
 							</button>
 						</div>
@@ -1093,7 +1478,9 @@ export default function GraphPage() {
 						<div className="flex items-center justify-center h-full">
 							<div className="text-center space-y-3">
 								<Network className="h-12 w-12 text-zinc-300 mx-auto animate-pulse" />
-								<p className="text-sm text-zinc-500">Loading knowledge graph…</p>
+								<p className="text-sm text-zinc-500">
+									Loading knowledge graph…
+								</p>
 							</div>
 						</div>
 					) : graphData.nodes.length === 0 ? (
@@ -1102,8 +1489,8 @@ export default function GraphPage() {
 								<Network className="h-12 w-12 text-zinc-300 mx-auto" />
 								<h3 className="text-lg font-medium">No graph data yet</h3>
 								<p className="text-sm text-zinc-500 max-w-md">
-									The knowledge graph populates after the pipeline runs.
-									You can also trigger it manually via the API.
+									The knowledge graph populates after the pipeline runs. You can
+									also trigger it manually via the API.
 								</p>
 							</div>
 						</div>
@@ -1128,7 +1515,8 @@ export default function GraphPage() {
 							}}
 							// eslint-disable-next-line @typescript-eslint/no-explicit-any
 							linkColor={(link: any) => {
-								if (!hoveredNode) return EDGE_COLORS[link.type as string] || "#ddd";
+								if (!hoveredNode)
+									return EDGE_COLORS[link.type as string] || "#ddd";
 								const src = getEdgeId(link.source);
 								const tgt = getEdgeId(link.target);
 								if (highlightNodes.has(src) && highlightNodes.has(tgt)) {
@@ -1141,14 +1529,18 @@ export default function GraphPage() {
 								if (!hoveredNode) return 0.5;
 								const src = getEdgeId(link.source);
 								const tgt = getEdgeId(link.target);
-								return (highlightNodes.has(src) && highlightNodes.has(tgt)) ? 1.5 : 0.2;
+								return highlightNodes.has(src) && highlightNodes.has(tgt)
+									? 1.5
+									: 0.2;
 							}}
 							linkDirectionalArrowLength={3}
 							linkDirectionalArrowRelPos={1}
 							linkDirectionalParticles={hoveredNode ? 2 : 0}
 							linkDirectionalParticleWidth={2}
 							// eslint-disable-next-line @typescript-eslint/no-explicit-any
-							linkDirectionalParticleColor={(link: any) => EDGE_COLORS[link.type as string] || "#999"}
+							linkDirectionalParticleColor={(link: any) =>
+								EDGE_COLORS[link.type as string] || "#999"
+							}
 							onNodeClick={handleNodeClick}
 							onNodeHover={handleNodeHover}
 							onBackgroundClick={() => {
@@ -1169,10 +1561,15 @@ export default function GraphPage() {
 					{!loading && graphData.nodes.length > 0 && (
 						<div className="absolute bottom-3 left-3 bg-white/90 dark:bg-zinc-900/90 backdrop-blur rounded-full px-3 py-1.5 shadow border text-xs text-zinc-500 flex items-center gap-2">
 							<Network className="h-3 w-3" />
-							{filteredData.nodes.length} nodes · {filteredData.links.length} edges
+							{filteredData.nodes.length} nodes · {filteredData.links.length}{" "}
+							edges
 							{hasActiveFilters && (
 								<button
-									onClick={() => { setHiddenNodes(new Set()); setHiddenEdgeTypes(new Set()); setHiddenNodeTypes(new Set()); }}
+									onClick={() => {
+										setHiddenNodes(new Set());
+										setHiddenEdgeTypes(new Set());
+										setHiddenNodeTypes(new Set());
+									}}
 									className="ml-1 flex items-center gap-0.5 text-blue-500 hover:text-blue-600 transition"
 									title="Clear all filters"
 								>
@@ -1191,9 +1588,16 @@ export default function GraphPage() {
 									<MousePointerClick className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
 								</div>
 								<p className="text-sm font-medium">
-									{selectedForSynthesis.size === 0
-										? "Click nodes to select"
-										: <><span className="text-amber-600 dark:text-amber-400 font-bold">{selectedForSynthesis.size}</span> selected</>}
+									{selectedForSynthesis.size === 0 ? (
+										"Click nodes to select"
+									) : (
+										<>
+											<span className="text-amber-600 dark:text-amber-400 font-bold">
+												{selectedForSynthesis.size}
+											</span>{" "}
+											selected
+										</>
+									)}
 								</p>
 							</div>
 
@@ -1224,6 +1628,14 @@ export default function GraphPage() {
 											<GraduationCap className="h-3 w-3" />
 											Publication
 										</button>
+										<button
+											onClick={() => setReportMode("agent")}
+											className={`flex items-center gap-1 px-2.5 py-1.5 transition ${reportMode === "agent" ? "bg-violet-500 text-white" : "hover:bg-zinc-100 dark:hover:bg-zinc-800"}`}
+											title="Agent explores graph autonomously, then synthesizes"
+										>
+											<Brain className="h-3 w-3" />
+											Deep
+										</button>
 									</div>
 
 									<Button
@@ -1242,7 +1654,11 @@ export default function GraphPage() {
 								</>
 							)}
 
-							<button onClick={toggleSelectMode} className="p-1 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 transition" title="Exit select mode">
+							<button
+								onClick={toggleSelectMode}
+								className="p-1 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
+								title="Exit select mode"
+							>
 								<X className="h-4 w-4 text-zinc-400" />
 							</button>
 						</div>
@@ -1257,38 +1673,51 @@ export default function GraphPage() {
 									<div className="flex items-center gap-2 min-w-0">
 										<div
 											className="h-8 w-8 rounded-full flex items-center justify-center shrink-0"
-											style={{ backgroundColor: NODE_COLORS[selectedNode.type] + "20" }}
+											style={{
+												backgroundColor: NODE_COLORS[selectedNode.type] + "20",
+											}}
 										>
 											{(() => {
 												const Icon = TypeIcon(selectedNode.type);
-												return <Icon className="h-4 w-4" style={{ color: NODE_COLORS[selectedNode.type] }} />;
+												return (
+													<Icon
+														className="h-4 w-4"
+														style={{ color: NODE_COLORS[selectedNode.type] }}
+													/>
+												);
 											})()}
 										</div>
 										<div className="min-w-0">
 											<Badge
 												className="text-[9px] px-1.5 py-0 mb-1"
-												style={{ backgroundColor: NODE_COLORS[selectedNode.type], color: "#fff" }}
+												style={{
+													backgroundColor: NODE_COLORS[selectedNode.type],
+													color: "#fff",
+												}}
 											>
 												{selectedNode.type}
 												{selectedNode.category && ` · ${selectedNode.category}`}
 											</Badge>
 										</div>
 									</div>
-<div className="flex items-center gap-0.5 shrink-0">
-									<button
-										onClick={() => toggleHiddenNode(selectedNode.id)}
-										className="p-1 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-900 transition"
-										title="Hide this node"
-									>
-										<EyeOff className="h-3.5 w-3.5 text-zinc-400" />
-									</button>
-									<button
-										onClick={() => { setSelectedNode(null); setNodeDetails(null); }}
-										className="p-1 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-900 transition"
-									>
-										<X className="h-4 w-4 text-zinc-400" />
-									</button>
-								</div>
+									<div className="flex items-center gap-0.5 shrink-0">
+										<button
+											onClick={() => toggleHiddenNode(selectedNode.id)}
+											className="p-1 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-900 transition"
+											title="Hide this node"
+										>
+											<EyeOff className="h-3.5 w-3.5 text-zinc-400" />
+										</button>
+										<button
+											onClick={() => {
+												setSelectedNode(null);
+												setNodeDetails(null);
+											}}
+											className="p-1 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-900 transition"
+										>
+											<X className="h-4 w-4 text-zinc-400" />
+										</button>
+									</div>
 								</div>
 
 								<h3 className="text-sm font-semibold leading-snug">
@@ -1309,8 +1738,20 @@ export default function GraphPage() {
 											<div className="space-y-3">
 												{nodeDetails.date && (
 													<p className="text-xs text-zinc-500">
-														Published {new Date(nodeDetails.date).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
-														{nodeDetails.source && <span className="ml-1.5 px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-900 text-[10px]">{nodeDetails.source}</span>}
+														Published{" "}
+														{new Date(nodeDetails.date).toLocaleDateString(
+															"en-US",
+															{
+																year: "numeric",
+																month: "long",
+																day: "numeric",
+															},
+														)}
+														{nodeDetails.source && (
+															<span className="ml-1.5 px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-900 text-[10px]">
+																{nodeDetails.source}
+															</span>
+														)}
 													</p>
 												)}
 
@@ -1320,14 +1761,26 @@ export default function GraphPage() {
 														variant="outline"
 														size="sm"
 														className="h-7 text-xs gap-1 text-purple-600"
-														onClick={() => router.push(`/ask?paper=${encodeURIComponent(nodeDetails.id)}`)}
+														onClick={() =>
+															router.push(
+																`/ask?paper=${encodeURIComponent(nodeDetails.id)}`,
+															)
+														}
 													>
 														<Sparkles className="h-3 w-3" />
 														Explore with AI
 													</Button>
 													{nodeDetails.url && (
-														<a href={nodeDetails.url} target="_blank" rel="noopener noreferrer">
-															<Button variant="outline" size="sm" className="h-7 text-xs gap-1">
+														<a
+															href={nodeDetails.url}
+															target="_blank"
+															rel="noopener noreferrer"
+														>
+															<Button
+																variant="outline"
+																size="sm"
+																className="h-7 text-xs gap-1"
+															>
 																<ExternalLink className="h-3 w-3" />
 																Paper
 															</Button>
@@ -1336,42 +1789,58 @@ export default function GraphPage() {
 												</div>
 
 												{/* Authors */}
-												{nodeDetails.authors && nodeDetails.authors.length > 0 && (
-													<div>
-														<p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1.5">
-															Authors ({nodeDetails.authors.length})
-														</p>
-														<div className="space-y-1">
-															{nodeDetails.authors.map((a, i) => (
-																<div key={i} className="flex items-center gap-1.5 text-xs">
-																	<Users className="h-3 w-3 shrink-0" style={{ color: NODE_COLORS.author }} />
-																	<span className="font-medium">{a.name}</span>
-																	{a.institution && <span className="text-zinc-400 text-[10px]">· {a.institution}</span>}
-																</div>
-															))}
+												{nodeDetails.authors &&
+													nodeDetails.authors.length > 0 && (
+														<div>
+															<p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1.5">
+																Authors ({nodeDetails.authors.length})
+															</p>
+															<div className="space-y-1">
+																{nodeDetails.authors.map((a, i) => (
+																	<div
+																		key={i}
+																		className="flex items-center gap-1.5 text-xs"
+																	>
+																		<Users
+																			className="h-3 w-3 shrink-0"
+																			style={{ color: NODE_COLORS.author }}
+																		/>
+																		<span className="font-medium">
+																			{a.name}
+																		</span>
+																		{a.institution && (
+																			<span className="text-zinc-400 text-[10px]">
+																				· {a.institution}
+																			</span>
+																		)}
+																	</div>
+																))}
+															</div>
 														</div>
-													</div>
-												)}
+													)}
 
 												{/* Concepts */}
-												{nodeDetails.concepts && nodeDetails.concepts.length > 0 && (
-													<div>
-														<p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1.5">
-															Concepts ({nodeDetails.concepts.length})
-														</p>
-														<div className="flex flex-wrap gap-1">
-															{nodeDetails.concepts.map((c, i) => (
-																<span
-																	key={i}
-																	className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
-																>
-																	{c.category && <span>{CATEGORY_ICONS[c.category]}</span>}
-																	<span>{c.name}</span>
-																</span>
-															))}
+												{nodeDetails.concepts &&
+													nodeDetails.concepts.length > 0 && (
+														<div>
+															<p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1.5">
+																Concepts ({nodeDetails.concepts.length})
+															</p>
+															<div className="flex flex-wrap gap-1">
+																{nodeDetails.concepts.map((c, i) => (
+																	<span
+																		key={i}
+																		className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
+																	>
+																		{c.category && (
+																			<span>{CATEGORY_ICONS[c.category]}</span>
+																		)}
+																		<span>{c.name}</span>
+																	</span>
+																))}
+															</div>
 														</div>
-													</div>
-												)}
+													)}
 
 												{/* Citations */}
 												{nodeDetails.cites && nodeDetails.cites.length > 0 && (
@@ -1381,10 +1850,15 @@ export default function GraphPage() {
 														</p>
 														<div className="space-y-1 max-h-32 overflow-y-auto">
 															{nodeDetails.cites.map((c, i) => (
-																<div key={i} className="flex items-center gap-1 group/ref">
+																<div
+																	key={i}
+																	className="flex items-center gap-1 group/ref"
+																>
 																	<button
 																		onClick={() => {
-																			const node = graphData.nodes.find((n) => n.id === c.id);
+																			const node = graphData.nodes.find(
+																				(n) => n.id === c.id,
+																			);
 																			if (node) handleNodeClick(node);
 																		}}
 																		className="flex-1 text-left text-xs text-blue-600 hover:text-blue-700 hover:underline line-clamp-1"
@@ -1392,7 +1866,10 @@ export default function GraphPage() {
 																		{c.title || c.id}
 																	</button>
 																	<button
-																		onClick={(e) => { e.stopPropagation(); toggleHiddenNode(c.id); }}
+																		onClick={(e) => {
+																			e.stopPropagation();
+																			toggleHiddenNode(c.id);
+																		}}
 																		className="opacity-0 group-hover/ref:opacity-100 p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 transition shrink-0"
 																		title="Hide this paper"
 																	>
@@ -1405,80 +1882,108 @@ export default function GraphPage() {
 												)}
 
 												{/* Cited by */}
-												{nodeDetails.cited_by && nodeDetails.cited_by.length > 0 && (
-													<div>
-														<p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1.5">
-															Cited By ({nodeDetails.cited_by.length})
-														</p>
-														<div className="space-y-1 max-h-32 overflow-y-auto">
-															{nodeDetails.cited_by.map((c, i) => (
-																<div key={i} className="flex items-center gap-1 group/citedby">
-																	<button
-																		onClick={() => {
-																			const node = graphData.nodes.find((n) => n.id === c.id);
-																			if (node) handleNodeClick(node);
-																		}}
-																		className="flex-1 text-left text-xs text-blue-600 hover:text-blue-700 hover:underline line-clamp-1"
+												{nodeDetails.cited_by &&
+													nodeDetails.cited_by.length > 0 && (
+														<div>
+															<p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1.5">
+																Cited By ({nodeDetails.cited_by.length})
+															</p>
+															<div className="space-y-1 max-h-32 overflow-y-auto">
+																{nodeDetails.cited_by.map((c, i) => (
+																	<div
+																		key={i}
+																		className="flex items-center gap-1 group/citedby"
 																	>
-																		{c.title || c.id}
-																	</button>
-																	<button
-																		onClick={(e) => { e.stopPropagation(); toggleHiddenNode(c.id); }}
-																		className="opacity-0 group-hover/citedby:opacity-100 p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 transition shrink-0"
-																		title="Hide this paper"
-																	>
-																		<EyeOff className="h-2.5 w-2.5 text-zinc-400" />
-																	</button>
-																</div>
-															))}
+																		<button
+																			onClick={() => {
+																				const node = graphData.nodes.find(
+																					(n) => n.id === c.id,
+																				);
+																				if (node) handleNodeClick(node);
+																			}}
+																			className="flex-1 text-left text-xs text-blue-600 hover:text-blue-700 hover:underline line-clamp-1"
+																		>
+																			{c.title || c.id}
+																		</button>
+																		<button
+																			onClick={(e) => {
+																				e.stopPropagation();
+																				toggleHiddenNode(c.id);
+																			}}
+																			className="opacity-0 group-hover/citedby:opacity-100 p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 transition shrink-0"
+																			title="Hide this paper"
+																		>
+																			<EyeOff className="h-2.5 w-2.5 text-zinc-400" />
+																		</button>
+																	</div>
+																))}
+															</div>
 														</div>
-													</div>
-												)}
+													)}
 											</div>
 										)}
 
 										{/* Author details */}
 										{nodeDetails.type === "author" && (
 											<div className="space-y-3">
-												{nodeDetails.institutions && nodeDetails.institutions.length > 0 && (
-													<div className="flex flex-wrap gap-1">
-														{nodeDetails.institutions.map((inst, i) => (
-															<span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
-																🏛️ {inst}
-															</span>
-														))}
-													</div>
-												)}
-												{nodeDetails.papers && nodeDetails.papers.length > 0 && (
-													<div>
-														<p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1.5">
-															Papers ({nodeDetails.papers.length})
-														</p>
-														<div className="space-y-1.5 max-h-64 overflow-y-auto">
-															{nodeDetails.papers.map((p, i) => (
-																<div key={i} className="relative group/apaper">
-																	<button
-																		onClick={() => {
-																			const node = graphData.nodes.find((n) => n.id === p.id);
-																			if (node) handleNodeClick(node);
-																		}}
-																		className="w-full text-left p-2 rounded-md bg-zinc-50 dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
-																	>
-																		<p className="text-xs font-medium line-clamp-2 pr-5">{p.title || p.id}</p>
-																		{p.date && <p className="text-[10px] text-zinc-400 mt-0.5">{p.date}</p>}
-																	</button>
-																	<button
-																		onClick={(e) => { e.stopPropagation(); toggleHiddenNode(p.id); }}
-																		className="absolute top-2 right-2 opacity-0 group-hover/apaper:opacity-100 p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 transition"
-																		title="Hide this paper"
-																	>
-																		<EyeOff className="h-2.5 w-2.5 text-zinc-400" />
-																	</button>
-																</div>
+												{nodeDetails.institutions &&
+													nodeDetails.institutions.length > 0 && (
+														<div className="flex flex-wrap gap-1">
+															{nodeDetails.institutions.map((inst, i) => (
+																<span
+																	key={i}
+																	className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
+																>
+																	🏛️ {inst}
+																</span>
 															))}
 														</div>
-													</div>
-												)}
+													)}
+												{nodeDetails.papers &&
+													nodeDetails.papers.length > 0 && (
+														<div>
+															<p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1.5">
+																Papers ({nodeDetails.papers.length})
+															</p>
+															<div className="space-y-1.5 max-h-64 overflow-y-auto">
+																{nodeDetails.papers.map((p, i) => (
+																	<div
+																		key={i}
+																		className="relative group/apaper"
+																	>
+																		<button
+																			onClick={() => {
+																				const node = graphData.nodes.find(
+																					(n) => n.id === p.id,
+																				);
+																				if (node) handleNodeClick(node);
+																			}}
+																			className="w-full text-left p-2 rounded-md bg-zinc-50 dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
+																		>
+																			<p className="text-xs font-medium line-clamp-2 pr-5">
+																				{p.title || p.id}
+																			</p>
+																			{p.date && (
+																				<p className="text-[10px] text-zinc-400 mt-0.5">
+																					{p.date}
+																				</p>
+																			)}
+																		</button>
+																		<button
+																			onClick={(e) => {
+																				e.stopPropagation();
+																				toggleHiddenNode(p.id);
+																			}}
+																			className="absolute top-2 right-2 opacity-0 group-hover/apaper:opacity-100 p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 transition"
+																			title="Hide this paper"
+																		>
+																			<EyeOff className="h-2.5 w-2.5 text-zinc-400" />
+																		</button>
+																	</div>
+																))}
+															</div>
+														</div>
+													)}
 											</div>
 										)}
 
@@ -1487,40 +1992,60 @@ export default function GraphPage() {
 											<div className="space-y-3">
 												{nodeDetails.category && (
 													<div className="flex items-center gap-2">
-														<span className="text-sm">{CATEGORY_ICONS[nodeDetails.category] || "📌"}</span>
-														<span className="text-xs text-zinc-500 capitalize">{nodeDetails.category}</span>
+														<span className="text-sm">
+															{CATEGORY_ICONS[nodeDetails.category] || "📌"}
+														</span>
+														<span className="text-xs text-zinc-500 capitalize">
+															{nodeDetails.category}
+														</span>
 													</div>
 												)}
-												{nodeDetails.papers && nodeDetails.papers.length > 0 && (
-													<div>
-														<p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1.5">
-															Papers using this concept ({nodeDetails.papers.length})
-														</p>
-														<div className="space-y-1.5 max-h-80 overflow-y-auto">
-															{nodeDetails.papers.map((p, i) => (
-																<div key={i} className="relative group/cpaper">
-																	<button
-																		onClick={() => {
-																			const node = graphData.nodes.find((n) => n.id === p.id);
-																			if (node) handleNodeClick(node);
-																		}}
-																		className="w-full text-left p-2 rounded-md bg-zinc-50 dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
+												{nodeDetails.papers &&
+													nodeDetails.papers.length > 0 && (
+														<div>
+															<p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-1.5">
+																Papers using this concept (
+																{nodeDetails.papers.length})
+															</p>
+															<div className="space-y-1.5 max-h-80 overflow-y-auto">
+																{nodeDetails.papers.map((p, i) => (
+																	<div
+																		key={i}
+																		className="relative group/cpaper"
 																	>
-																		<p className="text-xs font-medium line-clamp-2 pr-5">{p.title || p.id}</p>
-																		{p.date && <p className="text-[10px] text-zinc-400 mt-0.5">{p.date}</p>}
-																	</button>
-																	<button
-																		onClick={(e) => { e.stopPropagation(); toggleHiddenNode(p.id); }}
-																		className="absolute top-2 right-2 opacity-0 group-hover/cpaper:opacity-100 p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 transition"
-																		title="Hide this paper"
-																	>
-																		<EyeOff className="h-2.5 w-2.5 text-zinc-400" />
-																	</button>
-																</div>
-															))}
+																		<button
+																			onClick={() => {
+																				const node = graphData.nodes.find(
+																					(n) => n.id === p.id,
+																				);
+																				if (node) handleNodeClick(node);
+																			}}
+																			className="w-full text-left p-2 rounded-md bg-zinc-50 dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
+																		>
+																			<p className="text-xs font-medium line-clamp-2 pr-5">
+																				{p.title || p.id}
+																			</p>
+																			{p.date && (
+																				<p className="text-[10px] text-zinc-400 mt-0.5">
+																					{p.date}
+																				</p>
+																			)}
+																		</button>
+																		<button
+																			onClick={(e) => {
+																				e.stopPropagation();
+																				toggleHiddenNode(p.id);
+																			}}
+																			className="absolute top-2 right-2 opacity-0 group-hover/cpaper:opacity-100 p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 transition"
+																			title="Hide this paper"
+																		>
+																			<EyeOff className="h-2.5 w-2.5 text-zinc-400" />
+																		</button>
+																	</div>
+																))}
+															</div>
 														</div>
-													</div>
-												)}
+													)}
 											</div>
 										)}
 									</>
@@ -1543,18 +2068,28 @@ export default function GraphPage() {
 							{/* Panel header */}
 							<div className="border-b px-6 py-4 flex items-center justify-between shrink-0">
 								<div className="flex items-center gap-3">
-									<div className={`h-9 w-9 rounded-lg flex items-center justify-center ${reportMode === "publication" ? "bg-purple-100 dark:bg-purple-900" : "bg-amber-100 dark:bg-amber-900"}`}>
-										{reportMode === "publication"
-											? <GraduationCap className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-											: <FileText className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-										}
+									<div
+										className={`h-9 w-9 rounded-lg flex items-center justify-center ${reportMode === "agent" ? "bg-violet-100 dark:bg-violet-900" : reportMode === "publication" ? "bg-purple-100 dark:bg-purple-900" : "bg-amber-100 dark:bg-amber-900"}`}
+									>
+										{reportMode === "agent" ? (
+											<Brain className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+										) : reportMode === "publication" ? (
+											<GraduationCap className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+										) : (
+											<FileText className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+										)}
 									</div>
 									<div>
 										<h2 className="text-lg font-semibold">
-											{reportMode === "publication" ? "Publication Review" : "Literature Review"}
+											{reportMode === "agent"
+												? "Deep Analysis"
+												: reportMode === "publication"
+													? "Publication Review"
+													: "Literature Review"}
 										</h2>
 										<p className="text-xs text-zinc-500">
 											{selectedForSynthesis.size} papers analyzed
+											{reportMode === "agent" && " · agent traversal"}
 											{reportMode === "publication" && " · publication-ready"}
 										</p>
 									</div>
@@ -1579,7 +2114,13 @@ export default function GraphPage() {
 												className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900 transition border disabled:opacity-50"
 												title="Save report"
 											>
-												{reportSaved ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : savingReport ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+												{reportSaved ? (
+													<Check className="h-3.5 w-3.5 text-emerald-500" />
+												) : savingReport ? (
+													<Loader2 className="h-3.5 w-3.5 animate-spin" />
+												) : (
+													<Save className="h-3.5 w-3.5" />
+												)}
 												{reportSaved ? "Saved" : "Save"}
 											</button>
 											<button
@@ -1587,7 +2128,11 @@ export default function GraphPage() {
 												className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900 transition border"
 												title="Copy as Markdown"
 											>
-												{copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+												{copied ? (
+													<Check className="h-3.5 w-3.5 text-emerald-500" />
+												) : (
+													<Copy className="h-3.5 w-3.5" />
+												)}
 												{copied ? "Copied" : "Copy"}
 											</button>
 											<button
@@ -1624,105 +2169,379 @@ export default function GraphPage() {
 								{/* Section nav sidebar (publication mode) */}
 								{tocOpen && synthesisReport && reportMode === "publication" && (
 									<nav className="w-48 border-r shrink-0 overflow-y-auto py-3 px-2 space-y-0.5">
-										<p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 px-2 mb-2">Contents</p>
-										{synthesisReport.split("\n").filter((l) => /^#{1,3}\s/.test(l)).map((heading, i) => {
-											const level = heading.match(/^(#+)/)?.[1].length || 1;
-											const text = heading.replace(/^#+\s*/, "").replace(/\*\*/g, "");
-											const id = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-											return (
-												<button
-													key={i}
-													onClick={() => {
-														const el = document.getElementById(id);
-														if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-													}}
-													className={`block w-full text-left text-[11px] rounded-md px-2 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition truncate ${level === 1 ? "font-semibold" : level === 2 ? "pl-4 text-zinc-600 dark:text-zinc-400" : "pl-6 text-zinc-500 dark:text-zinc-500 text-[10px]"}`}
-												>
-													{text}
-												</button>
-											);
-										})}
+										<p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 px-2 mb-2">
+											Contents
+										</p>
+										{synthesisReport
+											.split("\n")
+											.filter((l) => /^#{1,3}\s/.test(l))
+											.map((heading, i) => {
+												const level = heading.match(/^(#+)/)?.[1].length || 1;
+												const text = heading
+													.replace(/^#+\s*/, "")
+													.replace(/\*\*/g, "");
+												const id = text
+													.toLowerCase()
+													.replace(/[^a-z0-9]+/g, "-")
+													.replace(/(^-|-$)/g, "");
+												return (
+													<button
+														key={i}
+														onClick={() => {
+															const el = document.getElementById(id);
+															if (el)
+																el.scrollIntoView({
+																	behavior: "smooth",
+																	block: "start",
+																});
+														}}
+														className={`block w-full text-left text-[11px] rounded-md px-2 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition truncate ${level === 1 ? "font-semibold" : level === 2 ? "pl-4 text-zinc-600 dark:text-zinc-400" : "pl-6 text-zinc-500 dark:text-zinc-500 text-[10px]"}`}
+													>
+														{text}
+													</button>
+												);
+											})}
 									</nav>
 								)}
 
 								<div className="flex-1 overflow-y-auto">
-								{synthesizing ? (
-									<div className="p-8 space-y-6">
-										<div className="flex items-center gap-3 text-zinc-500">
-											<Loader2 className="h-5 w-5 animate-spin text-amber-500" />
-											<p className="text-sm font-medium">
-												{reportMode === "publication"
-													? "Generating publication-ready review (this may take a moment)…"
-													: "Analyzing papers and generating review…"
-												}
-											</p>
-										</div>
-										{/* Skeleton shimmer */}
-										<div className="space-y-4 animate-pulse">
-											<div className="h-4 bg-zinc-200 dark:bg-zinc-800 rounded w-3/4" />
-											<div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-full" />
-											<div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-5/6" />
-											<div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-2/3" />
-											<div className="h-8 bg-zinc-200 dark:bg-zinc-800 rounded-lg w-full mt-6" />
-											<div className="h-32 bg-zinc-100 dark:bg-zinc-900 rounded-lg w-full border" />
-											<div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-full mt-4" />
-											<div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-4/5" />
-											<div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-3/4" />
-										</div>
-									</div>
-								) : synthesisReport ? (
-									<div className="p-6">
-										<article className="prose prose-zinc dark:prose-invert prose-sm max-w-none prose-headings:text-base prose-headings:font-semibold prose-p:leading-relaxed prose-li:leading-relaxed prose-pre:bg-transparent prose-pre:p-0">
-											<ReactMarkdown
-												components={{
-													h1({ children, ...props }) {
-														const text = String(children).replace(/\*\*/g, "");
-														const id = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-														return <h1 id={id} {...props}>{children}</h1>;
-													},
-													h2({ children, ...props }) {
-														const text = String(children).replace(/\*\*/g, "");
-														const id = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-														return <h2 id={id} {...props}>{children}</h2>;
-													},
-													h3({ children, ...props }) {
-														const text = String(children).replace(/\*\*/g, "");
-														const id = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-														return <h3 id={id} {...props}>{children}</h3>;
-													},
-													code({ className, children, ...props }) {
-														const match = /language-(\w+)/.exec(className || "");
-														const codeStr = String(children).replace(/\n$/, "");
+									{synthesizing ? (
+										reportMode === "agent" ? (
+											/* Agent traversal live progress */
+											<div className="p-6 space-y-4">
+												{/* Header */}
+												<div className="flex items-center gap-3 text-violet-600 dark:text-violet-400">
+													<Brain className="h-5 w-5 animate-pulse" />
+													<p className="text-sm font-semibold">
+														Agent is exploring the knowledge graph…
+													</p>
+												</div>
 
-														if (match?.[1] === "mermaid") {
-															return <MermaidRenderer code={codeStr} />;
-														}
+												{/* Traversal steps log */}
+												{agentSteps.length > 0 && (
+													<div className="space-y-1.5 max-h-48 overflow-y-auto border rounded-lg p-3 bg-zinc-50 dark:bg-zinc-900">
+														{agentSteps.map((s, i) => (
+															<div
+																key={i}
+																className="flex items-start gap-2 text-xs"
+															>
+																<span className="shrink-0 w-5 h-5 rounded-full bg-violet-100 dark:bg-violet-900 text-violet-600 dark:text-violet-400 flex items-center justify-center text-[10px] font-bold mt-0.5">
+																	{s.step}
+																</span>
+																<span className="text-zinc-600 dark:text-zinc-400">
+																	{s.detail}
+																</span>
+															</div>
+														))}
+													</div>
+												)}
 
-														// Inline code
-														if (!match) {
-															return (
-																<code className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-xs font-mono" {...props}>
-																	{children}
-																</code>
+												{/* Agent thought */}
+												{agentThought && (
+													<div className="border rounded-lg p-3 bg-violet-50 dark:bg-violet-950 text-xs text-violet-700 dark:text-violet-300 italic">
+														<p className="font-semibold text-[10px] uppercase tracking-widest text-violet-500 mb-1">
+															Agent reasoning
+														</p>
+														{agentThought.slice(0, 200)}
+														{agentThought.length > 200 ? "…" : ""}
+													</div>
+												)}
+
+												{/* Findings */}
+												{agentFindings.length > 0 && (
+													<div className="space-y-1.5">
+														<p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400">
+															Discoveries ({agentFindings.length})
+														</p>
+														{agentFindings.map((f, i) => (
+															<div
+																key={i}
+																className="flex items-start gap-2 text-xs p-2 rounded-md bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-800"
+															>
+																<Badge
+																	variant="outline"
+																	className="shrink-0 text-[9px] capitalize"
+																>
+																	{f.category}
+																</Badge>
+																<span className="text-zinc-700 dark:text-zinc-300">
+																	{f.description}
+																</span>
+															</div>
+														))}
+													</div>
+												)}
+
+												{/* Streaming synthesis text */}
+												{streamingText && (
+													<div className="border-t pt-4 mt-2">
+														<div className="flex items-center gap-2 mb-3">
+															<Loader2 className="h-4 w-4 animate-spin text-violet-500" />
+															<p className="text-xs font-semibold text-zinc-500">
+																Writing synthesis…
+															</p>
+														</div>
+														<article className="prose prose-zinc dark:prose-invert prose-sm max-w-none prose-headings:text-base prose-headings:font-semibold prose-p:leading-relaxed prose-li:leading-relaxed prose-pre:bg-transparent prose-pre:p-0">
+															<ReactMarkdown
+																components={{
+																	h1({ children, ...props }) {
+																		const text = String(children).replace(
+																			/\*\*/g,
+																			"",
+																		);
+																		const id = text
+																			.toLowerCase()
+																			.replace(/[^a-z0-9]+/g, "-")
+																			.replace(/(^-|-$)/g, "");
+																		return (
+																			<h1 id={id} {...props}>
+																				{children}
+																			</h1>
+																		);
+																	},
+																	h2({ children, ...props }) {
+																		const text = String(children).replace(
+																			/\*\*/g,
+																			"",
+																		);
+																		const id = text
+																			.toLowerCase()
+																			.replace(/[^a-z0-9]+/g, "-")
+																			.replace(/(^-|-$)/g, "");
+																		return (
+																			<h2 id={id} {...props}>
+																				{children}
+																			</h2>
+																		);
+																	},
+																	h3({ children, ...props }) {
+																		const text = String(children).replace(
+																			/\*\*/g,
+																			"",
+																		);
+																		const id = text
+																			.toLowerCase()
+																			.replace(/[^a-z0-9]+/g, "-")
+																			.replace(/(^-|-$)/g, "");
+																		return (
+																			<h3 id={id} {...props}>
+																				{children}
+																			</h3>
+																		);
+																	},
+																	code({ className, children, ...props }) {
+																		const match = /language-(\w+)/.exec(
+																			className || "",
+																		);
+																		const codeStr = String(children).replace(
+																			/\n$/,
+																			"",
+																		);
+																		if (match?.[1] === "mermaid")
+																			return <MermaidRenderer code={codeStr} />;
+																		if (!match)
+																			return (
+																				<code
+																					className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-xs font-mono"
+																					{...props}
+																				>
+																					{children}
+																				</code>
+																			);
+																		return (
+																			<pre className="rounded-lg border bg-zinc-50 dark:bg-zinc-900 p-4 overflow-x-auto">
+																				<code
+																					className={`${className} text-xs font-mono`}
+																					{...props}
+																				>
+																					{children}
+																				</code>
+																			</pre>
+																		);
+																	},
+																}}
+															>
+																{streamingText}
+															</ReactMarkdown>
+														</article>
+													</div>
+												)}
+
+												{/* Skeleton when no steps yet */}
+												{agentSteps.length === 0 && !streamingText && (
+													<div className="space-y-3 animate-pulse mt-4">
+														<div className="h-4 bg-zinc-200 dark:bg-zinc-800 rounded w-1/2" />
+														<div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-3/4" />
+														<div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-2/3" />
+													</div>
+												)}
+											</div>
+										) : (
+											<div className="p-8 space-y-6">
+												<div className="flex items-center gap-3 text-zinc-500">
+													<Loader2 className="h-5 w-5 animate-spin text-amber-500" />
+													<p className="text-sm font-medium">
+														{reportMode === "publication"
+															? "Generating publication-ready review (this may take a moment)…"
+															: "Analyzing papers and generating review…"}
+													</p>
+												</div>
+												{/* Skeleton shimmer */}
+												<div className="space-y-4 animate-pulse">
+													<div className="h-4 bg-zinc-200 dark:bg-zinc-800 rounded w-3/4" />
+													<div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-full" />
+													<div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-5/6" />
+													<div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-2/3" />
+													<div className="h-8 bg-zinc-200 dark:bg-zinc-800 rounded-lg w-full mt-6" />
+													<div className="h-32 bg-zinc-100 dark:bg-zinc-900 rounded-lg w-full border" />
+													<div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-full mt-4" />
+													<div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-4/5" />
+													<div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-3/4" />
+												</div>
+											</div>
+										)
+									) : synthesisReport ? (
+										<div className="p-6">
+											{/* Agent traversal summary (when finished) */}
+											{reportMode === "agent" &&
+												(agentSteps.length > 0 || agentFindings.length > 0) && (
+													<div className="mb-6 space-y-3">
+														<div className="flex items-center gap-2 text-xs text-violet-600 dark:text-violet-400">
+															<Brain className="h-3.5 w-3.5" />
+															<span className="font-semibold">
+																Agent explored{" "}
+																{
+																	agentSteps.filter(
+																		(s) =>
+																			s.action !== "Initializing" &&
+																			s.action !== "Synthesizing",
+																	).length
+																}{" "}
+																steps
+															</span>
+															{agentFindings.length > 0 && (
+																<span>· {agentFindings.length} findings</span>
+															)}
+														</div>
+														{agentFindings.length > 0 && (
+															<details className="border rounded-lg bg-zinc-50 dark:bg-zinc-900 text-xs">
+																<summary className="px-3 py-2 cursor-pointer font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition">
+																	View agent discoveries
+																</summary>
+																<div className="px-3 pb-3 space-y-1.5">
+																	{agentFindings.map((f, i) => (
+																		<div
+																			key={i}
+																			className="flex items-start gap-2 p-1.5"
+																		>
+																			<Badge
+																				variant="outline"
+																				className="shrink-0 text-[9px] capitalize"
+																			>
+																				{f.category}
+																			</Badge>
+																			<span className="text-zinc-600 dark:text-zinc-400">
+																				{f.description}
+																			</span>
+																		</div>
+																	))}
+																</div>
+															</details>
+														)}
+													</div>
+												)}
+											<article className="prose prose-zinc dark:prose-invert prose-sm max-w-none prose-headings:text-base prose-headings:font-semibold prose-p:leading-relaxed prose-li:leading-relaxed prose-pre:bg-transparent prose-pre:p-0">
+												<ReactMarkdown
+													components={{
+														h1({ children, ...props }) {
+															const text = String(children).replace(
+																/\*\*/g,
+																"",
 															);
-														}
-
-														// Block code (non-mermaid)
-														return (
-															<pre className="rounded-lg border bg-zinc-50 dark:bg-zinc-900 p-4 overflow-x-auto">
-																<code className={`${className} text-xs font-mono`} {...props}>
+															const id = text
+																.toLowerCase()
+																.replace(/[^a-z0-9]+/g, "-")
+																.replace(/(^-|-$)/g, "");
+															return (
+																<h1 id={id} {...props}>
 																	{children}
-																</code>
-															</pre>
-														);
-													},
-												}}
-											>
-												{synthesisReport}
-											</ReactMarkdown>
-										</article>
-									</div>
-								) : null}
+																</h1>
+															);
+														},
+														h2({ children, ...props }) {
+															const text = String(children).replace(
+																/\*\*/g,
+																"",
+															);
+															const id = text
+																.toLowerCase()
+																.replace(/[^a-z0-9]+/g, "-")
+																.replace(/(^-|-$)/g, "");
+															return (
+																<h2 id={id} {...props}>
+																	{children}
+																</h2>
+															);
+														},
+														h3({ children, ...props }) {
+															const text = String(children).replace(
+																/\*\*/g,
+																"",
+															);
+															const id = text
+																.toLowerCase()
+																.replace(/[^a-z0-9]+/g, "-")
+																.replace(/(^-|-$)/g, "");
+															return (
+																<h3 id={id} {...props}>
+																	{children}
+																</h3>
+															);
+														},
+														code({ className, children, ...props }) {
+															const match = /language-(\w+)/.exec(
+																className || "",
+															);
+															const codeStr = String(children).replace(
+																/\n$/,
+																"",
+															);
+
+															if (match?.[1] === "mermaid") {
+																return <MermaidRenderer code={codeStr} />;
+															}
+
+															// Inline code
+															if (!match) {
+																return (
+																	<code
+																		className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-xs font-mono"
+																		{...props}
+																	>
+																		{children}
+																	</code>
+																);
+															}
+
+															// Block code (non-mermaid)
+															return (
+																<pre className="rounded-lg border bg-zinc-50 dark:bg-zinc-900 p-4 overflow-x-auto">
+																	<code
+																		className={`${className} text-xs font-mono`}
+																		{...props}
+																	>
+																		{children}
+																	</code>
+																</pre>
+															);
+														},
+													}}
+												>
+													{synthesisReport}
+												</ReactMarkdown>
+											</article>
+										</div>
+									) : null}
 								</div>
 							</div>
 						</div>
@@ -1745,7 +2564,10 @@ export default function GraphPage() {
 								</div>
 								<div>
 									<h2 className="text-lg font-semibold">Saved Reports</h2>
-									<p className="text-xs text-zinc-500">{savedReports.length} report{savedReports.length !== 1 ? "s" : ""}</p>
+									<p className="text-xs text-zinc-500">
+										{savedReports.length} report
+										{savedReports.length !== 1 ? "s" : ""}
+									</p>
 								</div>
 							</div>
 							<button
@@ -1760,7 +2582,10 @@ export default function GraphPage() {
 								<div className="flex flex-col items-center justify-center h-64 text-zinc-400 space-y-2">
 									<BookMarked className="h-10 w-10 opacity-30" />
 									<p className="text-sm">No saved reports yet</p>
-									<p className="text-xs text-center max-w-xs">Select papers and synthesize a report, then save it for later.</p>
+									<p className="text-xs text-center max-w-xs">
+										Select papers and synthesize a report, then save it for
+										later.
+									</p>
 								</div>
 							) : (
 								<div className="p-4 space-y-2">
@@ -1771,14 +2596,26 @@ export default function GraphPage() {
 										>
 											<div className="flex items-start justify-between gap-2">
 												<button
-													onClick={() => { setViewingReport(report); setReportsOpen(false); }}
+													onClick={() => {
+														setViewingReport(report);
+														setReportsOpen(false);
+													}}
 													className="flex-1 text-left space-y-1"
 												>
-													<p className="text-sm font-medium line-clamp-2">{report.title}</p>
+													<p className="text-sm font-medium line-clamp-2">
+														{report.title}
+													</p>
 													<div className="flex items-center gap-2 text-[10px] text-zinc-400">
 														<span className="flex items-center gap-1">
 															<Clock className="h-2.5 w-2.5" />
-															{new Date(report.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+															{new Date(report.created_at).toLocaleDateString(
+																"en-US",
+																{
+																	month: "short",
+																	day: "numeric",
+																	year: "numeric",
+																},
+															)}
 														</span>
 														<span>{report.paper_count} papers</span>
 													</div>
@@ -1814,10 +2651,15 @@ export default function GraphPage() {
 									<FileText className="h-5 w-5 text-amber-600 dark:text-amber-400" />
 								</div>
 								<div>
-									<h2 className="text-lg font-semibold line-clamp-1">{viewingReport.title}</h2>
+									<h2 className="text-lg font-semibold line-clamp-1">
+										{viewingReport.title}
+									</h2>
 									<p className="text-xs text-zinc-500">
 										{viewingReport.paper_count} papers ·{" "}
-										{new Date(viewingReport.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+										{new Date(viewingReport.created_at).toLocaleDateString(
+											"en-US",
+											{ month: "long", day: "numeric", year: "numeric" },
+										)}
 									</p>
 								</div>
 							</div>
@@ -1830,16 +2672,25 @@ export default function GraphPage() {
 									}}
 									className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900 transition border"
 								>
-									{copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+									{copied ? (
+										<Check className="h-3.5 w-3.5 text-emerald-500" />
+									) : (
+										<Copy className="h-3.5 w-3.5" />
+									)}
 									{copied ? "Copied" : "Copy"}
 								</button>
 								<button
 									onClick={() => {
-										const blob = new Blob([viewingReport.markdown], { type: "text/markdown" });
+										const blob = new Blob([viewingReport.markdown], {
+											type: "text/markdown",
+										});
 										const url = URL.createObjectURL(blob);
 										const a = document.createElement("a");
 										a.href = url;
-										a.download = `${viewingReport.title.replace(/[^a-zA-Z0-9 ]/g, "").replace(/\s+/g, "-").toLowerCase()}.md`;
+										a.download = `${viewingReport.title
+											.replace(/[^a-zA-Z0-9 ]/g, "")
+											.replace(/\s+/g, "-")
+											.toLowerCase()}.md`;
 										a.click();
 										URL.revokeObjectURL(url);
 									}}
@@ -1865,7 +2716,11 @@ export default function GraphPage() {
 										className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900 transition border disabled:opacity-50"
 										title="Save report"
 									>
-										{savingReport ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+										{savingReport ? (
+											<Loader2 className="h-3.5 w-3.5 animate-spin" />
+										) : (
+											<Save className="h-3.5 w-3.5" />
+										)}
 										Save
 									</button>
 								)}
@@ -1889,14 +2744,20 @@ export default function GraphPage() {
 											}
 											if (!match) {
 												return (
-													<code className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-xs font-mono" {...props}>
+													<code
+														className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-xs font-mono"
+														{...props}
+													>
 														{children}
 													</code>
 												);
 											}
 											return (
 												<pre className="rounded-lg border bg-zinc-50 dark:bg-zinc-900 p-4 overflow-x-auto">
-													<code className={`${className} text-xs font-mono`} {...props}>
+													<code
+														className={`${className} text-xs font-mono`}
+														{...props}
+													>
 														{children}
 													</code>
 												</pre>

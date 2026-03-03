@@ -834,6 +834,60 @@ def get_subgraph_for_synthesis(node_ids: list[str]) -> dict:
         return {"papers": papers, "citations": citations}
 
 
+def get_citation_neighbors(arxiv_id: str, direction: str = "both") -> list[dict]:
+    """
+    Get papers that cite or are cited by a given paper.
+    direction: 'cites', 'cited_by', or 'both'
+    """
+    with get_session() as s:
+        results = []
+        if direction in ("cites", "both"):
+            res = s.run(
+                """
+                MATCH (p:Paper {arxiv_id: $arxiv_id})-[:CITES]->(cited:Paper)
+                OPTIONAL MATCH (cited)-[:INVOLVES_CONCEPT]->(c:Concept)
+                RETURN cited.arxiv_id AS arxiv_id,
+                       cited.title AS title,
+                       cited.published_date AS date,
+                       cited.source AS source,
+                       collect(DISTINCT c.name) AS concepts,
+                       'cites' AS direction
+                """,
+                arxiv_id=arxiv_id,
+            )
+            results.extend([dict(r) for r in res])
+        if direction in ("cited_by", "both"):
+            res = s.run(
+                """
+                MATCH (citing:Paper)-[:CITES]->(p:Paper {arxiv_id: $arxiv_id})
+                OPTIONAL MATCH (citing)-[:INVOLVES_CONCEPT]->(c:Concept)
+                RETURN citing.arxiv_id AS arxiv_id,
+                       citing.title AS title,
+                       citing.published_date AS date,
+                       citing.source AS source,
+                       collect(DISTINCT c.name) AS concepts,
+                       'cited_by' AS direction
+                """,
+                arxiv_id=arxiv_id,
+            )
+            results.extend([dict(r) for r in res])
+        return results
+
+
+def get_shared_concepts(arxiv_id_1: str, arxiv_id_2: str) -> list[dict]:
+    """Find concepts shared between two papers."""
+    with get_session() as s:
+        result = s.run(
+            """
+            MATCH (p1:Paper {arxiv_id: $id1})-[:INVOLVES_CONCEPT]->(c:Concept)<-[:INVOLVES_CONCEPT]-(p2:Paper {arxiv_id: $id2})
+            RETURN c.name AS name, c.category AS category
+            """,
+            id1=arxiv_id_1,
+            id2=arxiv_id_2,
+        )
+        return [dict(r) for r in result]
+
+
 def search_graph_nodes(query: str, limit: int = 20) -> list[dict]:
     """Full-text search across papers, authors, and concepts."""
     results = []
