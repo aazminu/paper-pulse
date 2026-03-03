@@ -305,9 +305,15 @@ def run_single_user_pipeline(user_id: str):
 
     try:
         from app.services.graph_pipeline_service import run_graph_pipeline
-        all_ids = list(processed_papers.keys())
+        all_ids = set(processed_papers.keys())
+        existing_resp = supabase.table("papers").select("arxiv_id").execute()
+        if existing_resp.data:
+            all_ids.update(row["arxiv_id"] for row in existing_resp.data)
+        all_ids = list(all_ids)
         if all_ids:
-            logger.info("[Graph Pipeline] Sending %d papers to graph pipeline", len(all_ids))
+            logger.info("[Graph Pipeline] Sending %d papers to graph pipeline (%d new, %d existing)",
+                        len(all_ids), len(processed_papers),
+                        len(all_ids) - len(processed_papers))
             run_graph_pipeline(paper_ids=all_ids)
         else:
             logger.warning("[Graph Pipeline] No papers to send to graph pipeline")
