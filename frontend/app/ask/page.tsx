@@ -835,20 +835,26 @@ export default function AskPage() {
 				const ensureExploreAi = () => {
 					if (!exploreAiAdded) {
 						exploreAiAdded = true;
-						setMessages((prev) => [...prev, { role: "ai" as const, content: "", sources: exploreSources }]);
+						setMessages((prev) => [
+							...prev,
+							{ role: "ai" as const, content: "", sources: exploreSources },
+						]);
 					}
 				};
 
 				await consumeSSE(
 					askRes,
-					(_stage, message) => { setStreamingStage(message); },
+					(_stage, message) => {
+						setStreamingStage(message);
+					},
 					(sources) => {
 						exploreSources = sources;
 						if (exploreAiAdded) {
 							setMessages((prev) => {
 								const updated = [...prev];
 								const last = updated[updated.length - 1];
-								if (last?.role === "ai") updated[updated.length - 1] = { ...last, sources };
+								if (last?.role === "ai")
+									updated[updated.length - 1] = { ...last, sources };
 								return updated;
 							});
 						}
@@ -860,17 +866,28 @@ export default function AskPage() {
 						setMessages((prev) => {
 							const updated = [...prev];
 							const last = updated[updated.length - 1];
-							if (last?.role === "ai") updated[updated.length - 1] = { ...last, content: exploreAnswer, sources: exploreSources };
+							if (last?.role === "ai")
+								updated[updated.length - 1] = {
+									...last,
+									content: exploreAnswer,
+									sources: exploreSources,
+								};
 							return updated;
 						});
 					},
-					() => { setStreamingStage(null); },
+					() => {
+						setStreamingStage(null);
+					},
 					(msg) => {
 						ensureExploreAi();
 						setMessages((prev) => {
 							const updated = [...prev];
 							const last = updated[updated.length - 1];
-							if (last?.role === "ai") updated[updated.length - 1] = { ...last, content: `Error: ${msg}` };
+							if (last?.role === "ai")
+								updated[updated.length - 1] = {
+									...last,
+									content: `Error: ${msg}`,
+								};
 							return updated;
 						});
 					},
@@ -1229,7 +1246,10 @@ export default function AskPage() {
 		onError: (msg: string) => void,
 	) => {
 		const reader = response.body?.getReader();
-		if (!reader) { onError("No response body"); return; }
+		if (!reader) {
+			onError("No response body");
+			return;
+		}
 		const decoder = new TextDecoder();
 		let buf = "";
 
@@ -1239,7 +1259,7 @@ export default function AskPage() {
 			buf += decoder.decode(value, { stream: true });
 
 			const parts = buf.split("\n\n");
-			buf = parts.pop() || "";              // keep last incomplete chunk
+			buf = parts.pop() || ""; // keep last incomplete chunk
 
 			for (const part of parts) {
 				const lines = part.split("\n");
@@ -1254,13 +1274,25 @@ export default function AskPage() {
 				try {
 					const data = JSON.parse(dataStr);
 					switch (eventType) {
-						case "stage": onStage(data.stage, data.message); break;
-						case "sources": onSources(data); break;
-						case "token": onToken(data.t); break;
-						case "done": onDone(); break;
-						case "error": onError(data.message); break;
+						case "stage":
+							onStage(data.stage, data.message);
+							break;
+						case "sources":
+							onSources(data);
+							break;
+						case "token":
+							onToken(data.t);
+							break;
+						case "done":
+							onDone();
+							break;
+						case "error":
+							onError(data.message);
+							break;
 					}
-				} catch { /* ignore parse errors */ }
+				} catch {
+					/* ignore parse errors */
+				}
 			}
 		}
 	};
@@ -1364,7 +1396,10 @@ export default function AskPage() {
 			const ensureAiMessage = () => {
 				if (!aiMessageAdded) {
 					aiMessageAdded = true;
-					setMessages((prev) => [...prev, { role: "ai" as const, content: "", sources: collectedSources }]);
+					setMessages((prev) => [
+						...prev,
+						{ role: "ai" as const, content: "", sources: collectedSources },
+					]);
 				}
 			};
 
@@ -1394,7 +1429,11 @@ export default function AskPage() {
 						const updated = [...prev];
 						const last = updated[updated.length - 1];
 						if (last?.role === "ai") {
-							updated[updated.length - 1] = { ...last, content: collectedAnswer, sources: collectedSources };
+							updated[updated.length - 1] = {
+								...last,
+								content: collectedAnswer,
+								sources: collectedSources,
+							};
 						}
 						return updated;
 					});
@@ -1752,115 +1791,124 @@ export default function AskPage() {
 					) : (
 						<>
 							{/* Messages */}
-							<div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
+							<div
+								ref={messagesContainerRef}
+								className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6"
+							>
 								<div className="max-w-4xl mx-auto space-y-6 pb-6">
 									{messages.map((msg, index) => {
-										if (msg.role === "ai" && !msg.content && (!msg.sources || msg.sources.length === 0)) return null;
+										if (
+											msg.role === "ai" &&
+											!msg.content &&
+											(!msg.sources || msg.sources.length === 0)
+										)
+											return null;
 										return (
-										<div
-											key={index}
-											className={`flex gap-4 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-										>
-											{msg.role === "ai" && (
-												<div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center shrink-0 mt-1">
-													<Bot className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-												</div>
-											)}
-
 											<div
-												className={`max-w-[85%] rounded-2xl p-4 ${
-													msg.role === "user"
-														? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-black rounded-tr-sm"
-														: "bg-white dark:bg-zinc-900 border shadow-sm rounded-tl-sm text-zinc-800 dark:text-zinc-200"
-												}`}
+												key={index}
+												className={`flex gap-4 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
 											>
-												{msg.role === "user" ? (
-													<div>
-														{msg.content !== "(attached files)" && (
-															<p className="whitespace-pre-wrap leading-relaxed text-sm sm:text-base">
-																{msg.content}
-															</p>
-														)}
-														{msg.attachments && msg.attachments.length > 0 && (
-															<div className="flex flex-wrap gap-1.5 mt-2">
-																{msg.attachments.map((att, i) => (
-																	<button
-																		key={i}
-																		onClick={() =>
-																			openPreview(msg.attachments!, i)
-																		}
-																		className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/20 dark:bg-black/20 text-xs hover:bg-white/30 dark:hover:bg-black/30 transition cursor-pointer"
-																	>
-																		{getFileIcon(att.type)}
-																		<span className="max-w-30 truncate">
-																			{att.name}
-																		</span>
-																		<Eye className="h-3 w-3 opacity-60" />
-																	</button>
-																))}
-															</div>
-														)}
-													</div>
-												) : (
-													<div className="text-sm sm:text-base text-zinc-800 dark:text-zinc-200">
-														<ReactMarkdown
-															remarkPlugins={[remarkGfm, remarkMath]}
-															rehypePlugins={[
-																[
-																	rehypeKatex,
-																	{ throwOnError: false, strict: false },
-																],
-															]}
-															components={markdownComponents}
-														>
-															{msg.content}
-														</ReactMarkdown>
+												{msg.role === "ai" && (
+													<div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center shrink-0 mt-1">
+														<Bot className="h-5 w-5 text-blue-600 dark:text-blue-400" />
 													</div>
 												)}
 
-												{msg.sources && msg.sources.length > 0 && (
-													<div className="mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-2">
-														<p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
-															Sources Referenced
-														</p>
-														{msg.sources.map((source, idx) => (
-															<div
-																key={idx}
-																className="flex gap-2 items-start bg-zinc-50 dark:bg-zinc-950 p-2 rounded-md border text-xs"
+												<div
+													className={`max-w-[85%] rounded-2xl p-4 ${
+														msg.role === "user"
+															? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-black rounded-tr-sm"
+															: "bg-white dark:bg-zinc-900 border shadow-sm rounded-tl-sm text-zinc-800 dark:text-zinc-200"
+													}`}
+												>
+													{msg.role === "user" ? (
+														<div>
+															{msg.content !== "(attached files)" && (
+																<p className="whitespace-pre-wrap leading-relaxed text-sm sm:text-base">
+																	{msg.content}
+																</p>
+															)}
+															{msg.attachments &&
+																msg.attachments.length > 0 && (
+																	<div className="flex flex-wrap gap-1.5 mt-2">
+																		{msg.attachments.map((att, i) => (
+																			<button
+																				key={i}
+																				onClick={() =>
+																					openPreview(msg.attachments!, i)
+																				}
+																				className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/20 dark:bg-black/20 text-xs hover:bg-white/30 dark:hover:bg-black/30 transition cursor-pointer"
+																			>
+																				{getFileIcon(att.type)}
+																				<span className="max-w-30 truncate">
+																					{att.name}
+																				</span>
+																				<Eye className="h-3 w-3 opacity-60" />
+																			</button>
+																		))}
+																	</div>
+																)}
+														</div>
+													) : (
+														<div className="text-sm sm:text-base text-zinc-800 dark:text-zinc-200">
+															<ReactMarkdown
+																remarkPlugins={[remarkGfm, remarkMath]}
+																rehypePlugins={[
+																	[
+																		rehypeKatex,
+																		{ throwOnError: false, strict: false },
+																	],
+																]}
+																components={markdownComponents}
 															>
-																<BookOpen className="h-4 w-4 text-zinc-400 shrink-0 mt-0.5" />
-																<div>
-																	<p className="font-medium line-clamp-1">
-																		{source.title}
-																	</p>
-																	<a
-																		href={`https://arxiv.org/abs/${source.arxiv_id}`}
-																		target="_blank"
-																		rel="noopener noreferrer"
-																		className="text-blue-600 hover:underline mt-1 inline-block"
-																	>
-																		arxiv.org/abs/{source.arxiv_id}
-																	</a>
+																{msg.content}
+															</ReactMarkdown>
+														</div>
+													)}
+
+													{msg.sources && msg.sources.length > 0 && (
+														<div className="mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-2">
+															<p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
+																Sources Referenced
+															</p>
+															{msg.sources.map((source, idx) => (
+																<div
+																	key={idx}
+																	className="flex gap-2 items-start bg-zinc-50 dark:bg-zinc-950 p-2 rounded-md border text-xs"
+																>
+																	<BookOpen className="h-4 w-4 text-zinc-400 shrink-0 mt-0.5" />
+																	<div>
+																		<p className="font-medium line-clamp-1">
+																			{source.title}
+																		</p>
+																		<a
+																			href={`https://arxiv.org/abs/${source.arxiv_id}`}
+																			target="_blank"
+																			rel="noopener noreferrer"
+																			className="text-blue-600 hover:underline mt-1 inline-block"
+																		>
+																			arxiv.org/abs/{source.arxiv_id}
+																		</a>
+																	</div>
 																</div>
-															</div>
-														))}
-														{/* Related papers from knowledge graph */}
-														{msg.sources.length > 0 && (
-															<RelatedPapers
-																arxivId={msg.sources[0].arxiv_id}
-															/>
-														)}
+															))}
+															{/* Related papers from knowledge graph */}
+															{msg.sources.length > 0 && (
+																<RelatedPapers
+																	arxivId={msg.sources[0].arxiv_id}
+																/>
+															)}
+														</div>
+													)}
+												</div>
+
+												{msg.role === "user" && (
+													<div className="h-8 w-8 rounded-full bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center shrink-0 mt-1">
+														<UserIcon className="h-5 w-5 text-zinc-500" />
 													</div>
 												)}
 											</div>
-
-											{msg.role === "user" && (
-												<div className="h-8 w-8 rounded-full bg-zinc-200 dark:bg-zinc-800 flex items-center justify-center shrink-0 mt-1">
-													<UserIcon className="h-5 w-5 text-zinc-500" />
-												</div>
-											)}
-										</div>
-									);
+										);
 									})}
 
 									{isLoading && streamingStage && (
@@ -1869,9 +1917,25 @@ export default function AskPage() {
 												<Bot className="h-5 w-5 text-blue-600 dark:text-blue-400 animate-pulse" />
 											</div>
 											<div className="bg-white dark:bg-zinc-900 border shadow-sm rounded-2xl rounded-tl-sm p-4 text-zinc-500 text-sm flex items-center gap-2">
-												<svg className="h-4 w-4 animate-spin text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-													<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-													<path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+												<svg
+													className="h-4 w-4 animate-spin text-blue-500"
+													xmlns="http://www.w3.org/2000/svg"
+													fill="none"
+													viewBox="0 0 24 24"
+												>
+													<circle
+														className="opacity-25"
+														cx="12"
+														cy="12"
+														r="10"
+														stroke="currentColor"
+														strokeWidth="4"
+													/>
+													<path
+														className="opacity-75"
+														fill="currentColor"
+														d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+													/>
 												</svg>
 												{streamingStage}
 											</div>

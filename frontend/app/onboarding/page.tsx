@@ -16,26 +16,22 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 const AVAILABLE_DOMAINS = [
-	// Core Sciences
 	{ id: "cs", label: "Computer Science", category: "Core Sciences" },
 	{ id: "math", label: "Mathematics", category: "Core Sciences" },
 	{ id: "physics", label: "Physics", category: "Core Sciences" },
 	{ id: "stat", label: "Statistics", category: "Core Sciences" },
 	{ id: "chem", label: "Chemistry", category: "Core Sciences" },
 
-	// Life & Health Sciences
 	{ id: "q-bio", label: "Quantitative Biology", category: "Life & Health" },
 	{ id: "bio", label: "Biology", category: "Life & Health" },
 	{ id: "med", label: "Medicine", category: "Life & Health" },
 	{ id: "psych", label: "Psychology", category: "Life & Health" },
 	{ id: "agri", label: "Agricultural Sciences", category: "Life & Health" },
 
-	// Engineering & Applied
 	{ id: "eess", label: "Electrical Engineering", category: "Engineering" },
 	{ id: "mat-sci", label: "Materials Science", category: "Engineering" },
 	{ id: "env", label: "Environmental Science", category: "Engineering" },
 
-	// Social Sciences & Humanities
 	{ id: "econ", label: "Economics", category: "Social Sciences" },
 	{ id: "q-fin", label: "Quantitative Finance", category: "Social Sciences" },
 	{ id: "soc", label: "Sociology", category: "Social Sciences" },
@@ -46,7 +42,6 @@ const AVAILABLE_DOMAINS = [
 	{ id: "law", label: "Law", category: "Social Sciences" },
 	{ id: "bus", label: "Business", category: "Social Sciences" },
 
-	// Physics Specializations
 	{
 		id: "astro-ph",
 		label: "Astrophysics",
@@ -74,7 +69,6 @@ const AVAILABLE_DOMAINS = [
 	},
 ];
 
-// Group domains by category for cleaner UI
 const DOMAIN_CATEGORIES = AVAILABLE_DOMAINS.reduce(
 	(acc, domain) => {
 		if (!acc[domain.category]) acc[domain.category] = [];
@@ -107,7 +101,6 @@ export default function OnboardingPage() {
 		setIsSubmitting(true);
 
 		try {
-			// Send the data to your FastAPI backend
 			const response = await fetch(
 				`${process.env.NEXT_PUBLIC_API_URL}/users/`,
 				{
@@ -123,7 +116,6 @@ export default function OnboardingPage() {
 			);
 
 			if (response.ok) {
-				// Redirect to the feed once the backend saves the user and generates the embedding
 				router.push("/feed");
 			} else {
 				const errorData = await response.json();

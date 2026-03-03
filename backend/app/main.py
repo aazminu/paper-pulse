@@ -19,7 +19,6 @@ load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialise Neo4j schema
     try:
         from app.services.neo4j_service import init_schema, close_driver
         init_schema()
@@ -27,15 +26,12 @@ async def lifespan(app: FastAPI):
         print(f"[Neo4j] Schema init skipped: {e}")
 
     scheduler = BackgroundScheduler()
-    
-    # Schedule the pipeline to run every day at midnight UTC
     scheduler.add_job(run_daily_pipeline, 'cron', hour=0, minute=0)
     scheduler.start()
     print("Background scheduler started. Nightly pipeline set for midnight.")
     
-    yield # The FastAPI application runs here
-    
-    # This runs gracefully when the server shuts down
+    yield
+
     scheduler.shutdown()
     try:
         close_driver()
