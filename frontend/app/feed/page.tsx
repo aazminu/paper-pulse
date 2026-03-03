@@ -301,12 +301,12 @@ export default function FeedPage() {
 										We&apos;re fetching papers from ArXiv, Semantic Scholar,
 										PubMed &amp; OpenAlex, extracting full texts, generating
 										embeddings and AI summaries, then ranking everything for
-										you. This can take 30–60 minutes. Feel free to close this
+										you. This can take 30-60 minutes. Feel free to close this
 										tab and come back later.
 									</p>
 									<div className="mt-6 flex justify-center">
 										<div className="h-1.5 w-48 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
-											<div className="h-full w-1/2 bg-zinc-400 dark:bg-zinc-500 rounded-full animate-[pulse_2s_ease-in-out_infinite]" />
+											<div className="h-full w-1/2 bg-zinc-400 dark:bg-zinc-500 rounded-full animate-[pulse_2s_ease-in-out_infinite]"></div>
 										</div>
 									</div>
 									<p className="text-xs text-zinc-400 mt-4">
