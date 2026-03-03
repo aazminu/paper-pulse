@@ -394,6 +394,26 @@ function GraphPageContent() {
 			}, 600);
 		} else {
 			(async () => {
+				const addFallbackNode = () => {
+					const fallbackNode: GraphNode = {
+						id: paperId,
+						label: paperId,
+						type: "paper",
+					};
+					setGraphData((prev) => {
+						if (prev.nodes.some((n) => n.id === paperId)) return prev;
+						return { nodes: [...prev.nodes, fallbackNode], edges: prev.edges };
+					});
+					setSelectedNode(fallbackNode);
+					fetchNodeDetails(fallbackNode);
+					setTimeout(() => {
+						if (graphRef.current) {
+							graphRef.current.centerAt(0, 0, 800);
+							graphRef.current.zoom(3, 800);
+						}
+					}, 800);
+				};
+
 				try {
 					const res = await authFetch(
 						`${API}/graph/paper/${encodeURIComponent(paperId)}`,
@@ -426,15 +446,11 @@ function GraphPageContent() {
 								graphRef.current.zoom(3, 800);
 							}
 						}, 800);
+					} else {
+						addFallbackNode();
 					}
 				} catch {
-					const fallbackNode: GraphNode = {
-						id: paperId,
-						label: paperId,
-						type: "paper",
-					};
-					setSelectedNode(fallbackNode);
-					fetchNodeDetails(fallbackNode);
+					addFallbackNode();
 				}
 			})();
 		}
@@ -1083,7 +1099,7 @@ function GraphPageContent() {
 							Ask AI
 						</Link>
 						<Link href="/graph" className="text-black dark:text-white">
-							Knowledge Graph
+							Graph
 						</Link>
 					</nav>
 				</div>

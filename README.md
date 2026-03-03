@@ -265,7 +265,9 @@ flowchart TD
     FEED --> GRAPH[Run Graph Pipeline]
 ```
 
-**Query optimization** happens once per user. The system takes the user's free-text interests and selected domains, and uses o4-mini to generate 3-5 focused search queries, 6-10 technical keywords, and 2-5 specific ArXiv sub-categories. These optimized queries are cached in the user record and reused on subsequent pipeline runs.
+**Query optimization** runs once when a user first onboards, then refreshes automatically every 7 days. The system takes the user's free-text interests and selected domains, and uses o4-mini to generate 3-5 focused search queries, 6-10 technical keywords, and 2-5 specific ArXiv sub-categories. These optimized queries are cached in the user record with a `generated_at` timestamp and reused on subsequent daily pipeline runs until the 7-day refresh window expires.
+
+> **Daily vs. 7-day**: The pipeline itself runs **every day at midnight** (UTC), fetching and ranking new papers for every user. The 7-day cycle only controls how often the **search queries** are regenerated — the actual paper fetching, embedding, summarization, and ranking happen every single night.
 
 **Paper source details**:
 
