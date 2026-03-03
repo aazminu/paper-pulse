@@ -1,23 +1,23 @@
 """
-PaperPulse Daily Pipeline — LLM-Optimized Per-User Fetching
+PaperPulse Daily Pipeline - LLM-Optimized Per-User Fetching
 
 Flow:
-  1. For each user → load their cached LLM-optimized search profile
+  1. For each user -> load their cached LLM-optimized search profile
   2. Query all 4 sources with optimized keywords + sub-categories (~30/source)
-  3. Global dedup → embed + summarize all new unique papers (once)
-  4. For each user → Cohere rerank-v4.0-pro on their pool → top 25
+  3. Global dedup -> embed + summarize all new unique papers (once)
+  4. For each user -> Cohere rerank-v4.0-pro on their pool -> top 25
 
 The LLM query optimizer (o4-mini) transforms casual user interests into
 precision search queries at onboarding. The cached profile eliminates the
-need for heavy post-retrieval ranking (RRF) — the APIs themselves return
+need for heavy post-retrieval ranking (RRF) - the APIs themselves return
 relevance-sorted results matched to exact technical vocabulary.
 
-Sources: ArXiv · Semantic Scholar · PubMed · OpenAlex
+Sources: ArXiv, Semantic Scholar, PubMed, OpenAlex
 Embedding: text-embedding-3-large (1536-dim)
 Re-ranking: Cohere rerank-v4.0-pro (32K context per doc)
 Summaries: o4-mini (reasoning_effort=low)
-Query Optimisation: o4-mini (reasoning_effort=low)
-Q&A: gpt-4.1 — best instruction-following model with 1M context
+Query Optimization: o4-mini (reasoning_effort=low)
+Q&A: gpt-4.1 - best instruction-following model with 1M context
 PDF: Full-text extraction for ArXiv papers via PyMuPDF
 """
 
@@ -36,10 +36,7 @@ from app.services.pdf_service import batch_extract_arxiv
 from app.services.query_optimizer import optimize_user_interests
 from app.services.chunking_service import batch_chunk_papers
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-PER_SOURCE_LIMIT = 30         # Papers per source per user (APIs sort by relevance)
+PER_SOURCE_LIMIT = 30         # Papers per source per user 
 EMBEDDING_BATCH_SIZE = 64     # Papers to embed in one API call
 TOP_MATCHES_PER_USER = 25     # Feed items per user after re-ranking
 
@@ -53,7 +50,6 @@ def _deduplicate_papers(paper_lists: list[list[dict]]) -> list[dict]:
     seen_titles: set[str] = set()
     merged: list[dict] = []
 
-    # ArXiv papers first (they have canonical IDs)
     for papers in paper_lists:
         for p in papers:
             pid = p.get("arxiv_id", "")
@@ -74,17 +70,14 @@ def run_daily_pipeline():
     """
     LLM-optimized per-user pipeline:
       1. Load users + their cached optimized search profiles
-      2. For each user → fetch ~30/source with optimized queries
-      3. Global dedup → ArXiv PDF extract → batch embed → summarize
-      4. For each user → Cohere rerank → save top 25 to feed
+      2. For each user -> fetch ~30/source with optimized queries
+      3. Global dedup -> ArXiv PDF extract -> batch embed -> summarize
+      4. For each user -> Cohere rerank -> save top 25 to feed
     """
     print("=" * 60)
     print("Starting PaperPulse Daily Pipeline (LLM-Optimized Queries)")
     print("=" * 60)
 
-    # ------------------------------------------------------------------
-    # Step 1: Get all users
-    # ------------------------------------------------------------------
     users_response = supabase.table("users").select("*").execute()
     users = users_response.data
     if not users:
@@ -93,9 +86,6 @@ def run_daily_pipeline():
 
     print(f"Processing {len(users)} user(s)")
 
-    # ------------------------------------------------------------------
-    # Step 2: Per-user fetching with LLM-optimized queries
-    # ------------------------------------------------------------------
     user_paper_ids: dict[str, set[str]] = {}
     all_raw_papers: list[dict] = []
     source_counts = {"arxiv": 0, "semantic_scholar": 0, "pubmed": 0, "openalex": 0}
@@ -107,10 +97,9 @@ def run_daily_pipeline():
         user_paper_ids[user_id] = set()
 
         if not domains:
-            print(f"  User {user_id[:8]}… — no domains, skipping fetch")
+            print(f"  User {user_id[:8]}... - no domains, skipping fetch")
             continue
 
-        # Load cached optimized queries (generated at onboarding)
         optimized_raw = user.get("optimized_queries")
         if optimized_raw:
             try:
@@ -120,9 +109,8 @@ def run_daily_pipeline():
         else:
             optimized = None
 
-        # If no cached profile, generate one now and save it
         if not optimized or not optimized.get("search_queries"):
-            print(f"  User {user_id[:8]}… — no cached queries, generating now…")
+            print(f"  User {user_id[:8]}... - no cached queries, generating now...")
             optimized = optimize_user_interests(interest_text, domains)
             try:
                 supabase.table("users").update({
@@ -135,14 +123,12 @@ def run_daily_pipeline():
         keywords = optimized.get("keywords", [])
         arxiv_categories = optimized.get("arxiv_categories", [])
 
-        print(f"\n  User {user_id[:8]}… — domains={domains}")
+        print(f"\n  User {user_id[:8]}... - domains={domains}")
         print(f"    queries: {search_queries}")
         print(f"    keywords: {keywords}")
 
-        # Use the optimized search query as the Cohere rerank query later
         rerank_query = " ".join(search_queries) if search_queries else interest_text
 
-        # Fetch from each source with optimized queries
         try:
             arxiv = fetch_arxiv(
                 domains, max_results=PER_SOURCE_LIMIT,
@@ -193,15 +179,9 @@ def run_daily_pipeline():
 
         all_raw_papers.extend(user_papers)
 
-    # ------------------------------------------------------------------
-    # Step 3: Global dedup across all users
-    # ------------------------------------------------------------------
     all_papers = _deduplicate_papers([all_raw_papers])
     print(f"\nTotal unique papers across all users: {len(all_papers)}")
 
-    # ------------------------------------------------------------------
-    # Step 4: Process papers (Embed + Summarize) — only new ones
-    # ------------------------------------------------------------------
     print("\n--- Processing papers (embed + summarize) ---")
     processed_papers: dict[str, dict] = {}
     papers_to_embed: list[tuple[str, dict]] = []
@@ -242,18 +222,12 @@ def run_daily_pipeline():
 
     print(f"New papers to embed: {len(papers_to_embed)}")
 
-    # Extract full text from ArXiv PDFs
-    arxiv_papers_to_extract = [
-        (pid, p) for pid, p in papers_to_embed
-        if p.get("source") == "arxiv" and pid.strip()
-    ]
     full_texts: dict[str, str | None] = {}
     if arxiv_papers_to_extract:
         print(f"\n--- Extracting full text from {len(arxiv_papers_to_extract)} ArXiv PDFs ---")
         ids_to_extract = [pid for pid, _ in arxiv_papers_to_extract]
         full_texts = batch_extract_arxiv(ids_to_extract, rate_limit=1.0)
 
-    # Batch embed
     if papers_to_embed:
         for batch_start in range(0, len(papers_to_embed), EMBEDDING_BATCH_SIZE):
             batch = papers_to_embed[batch_start : batch_start + EMBEDDING_BATCH_SIZE]
@@ -280,9 +254,6 @@ def run_daily_pipeline():
 
                 processed_papers[pid] = paper_record
 
-    # ------------------------------------------------------------------
-    # Step 5: Chunk + embed full-text papers for sub-document Q&A
-    # ------------------------------------------------------------------
     papers_with_text = [
         processed_papers[pid]
         for pid, _ in papers_to_embed
@@ -293,7 +264,6 @@ def run_daily_pipeline():
         all_chunks = batch_chunk_papers(papers_with_text)
         print(f"  Generated {len(all_chunks)} chunks total")
 
-        # Batch embed all chunks
         if all_chunks:
             for batch_start in range(0, len(all_chunks), EMBEDDING_BATCH_SIZE):
                 batch = all_chunks[batch_start : batch_start + EMBEDDING_BATCH_SIZE]
@@ -323,11 +293,6 @@ def run_daily_pipeline():
 
             print(f"  Stored {len(all_chunks)} chunks in paper_chunks table")
 
-    # ------------------------------------------------------------------
-    # Step 6: Per-user Cohere rerank → top 25
-    #   No RRF needed — APIs already returned relevance-sorted results
-    #   via LLM-optimized queries. Cohere just picks the best 25.
-    # ------------------------------------------------------------------
     print("\n--- Ranking papers per user (Cohere Rerank) ---")
     feed_items_created = 0
 
@@ -337,10 +302,9 @@ def run_daily_pipeline():
         paper_ids_for_user = user_paper_ids.get(user_id, set())
 
         if not paper_ids_for_user:
-            print(f"  Skipping user {user_id[:8]}… (no papers fetched)")
+            print(f"  Skipping user {user_id[:8]}... (no papers fetched)")
             continue
 
-        # Build rerank query from optimized queries or fallback to interest_text
         optimized_raw = user.get("optimized_queries")
         if optimized_raw:
             try:
@@ -354,16 +318,14 @@ def run_daily_pipeline():
         if not rerank_query:
             rerank_query = interest_text or "recent research"
 
-        # Build this user's paper pool
         user_pool = [
             processed_papers[pid]
             for pid in paper_ids_for_user
             if pid in processed_papers
         ]
 
-        print(f"  User {user_id[:8]}… — {len(user_pool)} papers → Cohere rerank → top {TOP_MATCHES_PER_USER}")
+        print(f"  User {user_id[:8]}... - {len(user_pool)} papers -> Cohere rerank -> top {TOP_MATCHES_PER_USER}")
 
-        # Cohere rerank picks the best 25 from the pool
         if len(user_pool) > TOP_MATCHES_PER_USER:
             reranked = rerank_papers(
                 query=rerank_query,
@@ -373,7 +335,6 @@ def run_daily_pipeline():
         else:
             reranked = user_pool
 
-        # Save to feed_items
         for rank, paper in enumerate(reranked):
             relevance_score = paper.get("_rerank_score",
                               1.0 - (rank / max(len(reranked), 1)))
@@ -387,7 +348,7 @@ def run_daily_pipeline():
                 supabase.table("feed_items").insert(feed_record).execute()
                 feed_items_created += 1
             except Exception:
-                pass  # UNIQUE constraint — already in feed
+                pass  # UNIQUE constraint - already in feed
 
     print(f"\n{'=' * 60}")
     print(f"Feed pipeline complete!")
@@ -396,9 +357,6 @@ def run_daily_pipeline():
     print(f"  Feed items created: {feed_items_created}")
     print(f"{'=' * 60}")
 
-    # ------------------------------------------------------------------
-    # Step 7: Knowledge Graph Population
-    # ------------------------------------------------------------------
     graph_result = {}
     try:
         from app.services.graph_pipeline_service import run_graph_pipeline
@@ -406,7 +364,7 @@ def run_daily_pipeline():
         if new_paper_ids:
             graph_result = run_graph_pipeline(paper_ids=new_paper_ids)
         else:
-            print("\nNo new papers — skipping graph pipeline")
+            print("\nNo new papers - skipping graph pipeline")
     except Exception as e:
         print(f"\n[Graph Pipeline] Error (non-fatal): {e}")
         graph_result = {"status": "error", "message": str(e)}

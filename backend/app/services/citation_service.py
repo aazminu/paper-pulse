@@ -2,8 +2,8 @@
 Citation Fetcher for PaperPulse Knowledge Graph
 
 Fetches citation relationships (references + citations) from:
-  1. Semantic Scholar API  (primary — has ArXiv ID mapping)
-  2. OpenAlex API          (fallback — uses DOI)
+  1. Semantic Scholar API  (primary - has ArXiv ID mapping)
+  2. OpenAlex API          (fallback - uses DOI)
 
 Returns lists of cited paper IDs to build the CITES relationship in Neo4j.
 """
@@ -19,7 +19,6 @@ load_dotenv()
 
 OPENALEX_MAILTO = os.getenv("OPENALEX_MAILTO", "")
 
-# Semantic Scholar fields we need
 S2_FIELDS = "externalIds,title"
 S2_BASE = "https://api.semanticscholar.org/graph/v1/paper"
 
@@ -52,7 +51,6 @@ def fetch_citations_s2(arxiv_id: str) -> dict:
 
     result = {"references": [], "citations": []}
 
-    # Fetch references (papers this paper cites)
     refs_url = f"{S2_BASE}/ARXIV:{clean_id}/references?fields={S2_FIELDS}&limit=100"
     refs_data = _s2_get(refs_url)
     time.sleep(1.0)  # Rate limit
@@ -63,12 +61,10 @@ def fetch_citations_s2(arxiv_id: str) -> dict:
                 continue
             cited = item.get("citedPaper") or {}
             ext_ids = cited.get("externalIds") or {}
-            # Prefer ArXiv ID
             aid = ext_ids.get("ArXiv")
             if aid:
                 result["references"].append(aid)
 
-    # Fetch citations (papers that cite this paper)
     cites_url = f"{S2_BASE}/ARXIV:{clean_id}/citations?fields={S2_FIELDS}&limit=100"
     cites_data = _s2_get(cites_url)
     time.sleep(1.0)
@@ -96,7 +92,6 @@ def fetch_citations_openalex(doi: str) -> dict:
 
     result = {"references": [], "citations": []}
 
-    # Fetch the work
     mailto_param = f"&mailto={OPENALEX_MAILTO}" if OPENALEX_MAILTO else ""
     work_url = f"https://api.openalex.org/works/doi:{doi}?select=id,referenced_works,cited_by_api_url{mailto_param}"
 
@@ -109,12 +104,9 @@ def fetch_citations_openalex(doi: str) -> dict:
         print(f"    [CitationFetch] OpenAlex request failed: {e}")
         return result
 
-    # Get referenced works (papers this paper cites)
     referenced = data.get("referenced_works", [])
     for ref_url in referenced[:100]:
-        # OpenAlex IDs look like https://openalex.org/W123456
-        # We need to resolve them to get ArXiv IDs
-        pass  # OpenAlex doesn't easily give ArXiv IDs, so S2 is primary
+        pass
 
     time.sleep(0.5)
     return result
@@ -134,18 +126,18 @@ def batch_fetch_citations(papers: list[dict], rate_limit: float = 1.5) -> dict[s
         if not pid:
             continue
 
-        print(f"  [CitationFetch] Fetching for {pid}: {paper.get('title', '')[:50]}…")
+        print(f"  [CitationFetch] Fetching for {pid}: {paper.get('title', '')[:50]}...")
         citation_data = fetch_citations_s2(pid)
 
         ref_count = len(citation_data["references"])
         cite_count = len(citation_data["citations"])
 
         if ref_count or cite_count:
-            print(f"    → {ref_count} references, {cite_count} citations")
+            print(f" -> {ref_count} references, {cite_count} citations")
         else:
-            print(f"    → No citation data found")
+            print(f" -> No citation data found")
 
         results[pid] = citation_data
-        time.sleep(rate_limit)  # Be nice to the API
+        time.sleep(rate_limit)
 
     return results

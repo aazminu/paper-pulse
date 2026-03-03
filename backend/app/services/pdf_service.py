@@ -5,7 +5,7 @@ With gpt-4.1's 1M token context window, we no longer need to rely on just
 paper abstracts.  This service downloads ArXiv PDFs and extracts the full
 text so the LLM can cross-reference entire papers natively.
 
-Uses PyMuPDF (fitz) — the fastest pure-Python PDF text extractor.
+Uses PyMuPDF (fitz) - the fastest pure-Python PDF text extractor.
 
 Usage:
   from app.services.pdf_service import extract_arxiv_full_text
@@ -23,13 +23,10 @@ from typing import Optional
 import fitz  # type: ignore[import-untyped]  # PyMuPDF
 
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
 ARXIV_PDF_BASE = "https://arxiv.org/pdf/{arxiv_id}.pdf"
 PDF_DOWNLOAD_TIMEOUT = 30  # seconds
 PDF_RATE_LIMIT_SECONDS = 1  # Be polite to ArXiv servers
-MAX_TEXT_CHARS = 120_000  # ~30K tokens — keeps embedding + LLM calls reasonable
+MAX_TEXT_CHARS = 120_000  # ~30K tokens - keeps embedding + LLM calls reasonable
 USER_AGENT = "PaperPulse/1.0 (Academic Research Tool; mailto:paperpulse@example.com)"
 
 
@@ -97,30 +94,22 @@ def _extract_text_from_bytes(pdf_bytes: bytes) -> str:
 def _clean_extracted_text(text: str) -> str:
     """
     Clean up PDF-extracted text:
-    - Remove excessive whitespace / line breaks
-    - Remove page headers/footers (common patterns)
-    - Remove reference numbering artifacts
-    - Normalize unicode
+ - Remove excessive whitespace / line breaks
+ - Remove page headers/footers (common patterns)
+ - Remove reference numbering artifacts
+ - Normalize unicode
     """
-    # Collapse multiple newlines into double newline (paragraph break)
-    text = text.replace('\u0000', '')  # Strip null bytes (Postgres can't store them)
+    text = text.replace('\u0000', '')  # strip null bytes
     text = re.sub(r'\n{3,}', '\n\n', text)
 
-    # Collapse multiple spaces
     text = re.sub(r' {2,}', ' ', text)
 
-    # Remove common PDF artifacts
-    # Page numbers at start/end of lines
     text = re.sub(r'^\d+\s*$', '', text, flags=re.MULTILINE)
 
-    # Remove hyphenation at line breaks (e.g., "computa-\ntion" → "computation")
     text = re.sub(r'(\w)-\n(\w)', r'\1\2', text)
 
-    # Clean up remaining single newlines within paragraphs
-    # (keep double newlines as paragraph breaks)
     text = re.sub(r'(?<!\n)\n(?!\n)', ' ', text)
 
-    # Collapse resultant multiple spaces again
     text = re.sub(r' {2,}', ' ', text)
 
     return text.strip()
@@ -138,7 +127,7 @@ def batch_extract_arxiv(
         rate_limit: Seconds to wait between downloads.
 
     Returns:
-        Dict mapping arxiv_id → full_text (or None on failure).
+        Dict mapping arxiv_id -> full_text (or None on failure).
     """
     results: dict[str, Optional[str]] = {}
 

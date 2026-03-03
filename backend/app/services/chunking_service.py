@@ -1,15 +1,15 @@
 """
-Paper Chunking Service — Full-Text → Overlapping Chunks for Dense Retrieval
+Paper Chunking Service - Full-Text -> Overlapping Chunks for Dense Retrieval
 
 Splits PDF-extracted full text into ~512-token chunks with ~50-token overlap.
 Chunks are embedded independently and stored in the `paper_chunks` table,
 enabling sub-document vector search during Q&A ("parent-child retrieval").
 
 Why chunking matters:
-  - Abstract-only embeddings miss 95%+ of a paper's content
-  - Full-text embeddings dilute signal across thousands of tokens
-  - Chunk-level search pinpoints the exact paragraph that answers a question
-  - Cohere reranking on chunks is far more precise than on whole papers
+ - Abstract-only embeddings miss 95%+ of a paper's content
+ - Full-text embeddings dilute signal across thousands of tokens
+ - Chunk-level search pinpoints the exact paragraph that answers a question
+ - Cohere reranking on chunks is far more precise than on whole papers
 
 Token counting uses tiktoken's cl100k_base (same tokenizer as
 text-embedding-3-large), so chunk sizes respect the model's native boundaries.
@@ -20,14 +20,10 @@ from typing import Optional
 
 import tiktoken
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
 CHUNK_SIZE_TOKENS = 512     # Target tokens per chunk
 CHUNK_OVERLAP_TOKENS = 50   # Overlap between consecutive chunks
 MIN_CHUNK_TOKENS = 50       # Skip chunks smaller than this
 
-# cl100k_base is the tokenizer used by text-embedding-3-large
 _enc = tiktoken.get_encoding("cl100k_base")
 
 
@@ -41,17 +37,14 @@ def _split_into_paragraphs(text: str) -> list[str]:
     Split text into paragraphs on double-newlines.
     Falls back to single-newline splits if paragraphs are too large.
     """
-    # Primary split on double newlines (paragraph boundaries)
     paragraphs = re.split(r'\n\n+', text)
 
-    # If any paragraph is still very large, split on single newlines
     result = []
     for para in paragraphs:
         para = para.strip()
         if not para:
             continue
         if _count_tokens(para) > CHUNK_SIZE_TOKENS * 2:
-            # Sub-split on single newlines
             sub_parts = para.split('\n')
             for sp in sub_parts:
                 sp = sp.strip()
@@ -82,21 +75,17 @@ def _merge_paragraphs_into_chunks(
     for para in paragraphs:
         para_tokens = _count_tokens(para)
 
-        # If a single paragraph exceeds chunk_size, force-split by sentences
         if para_tokens > chunk_size:
-            # Flush current buffer first
             if current_parts:
                 chunks.append("\n\n".join(current_parts))
                 current_parts = []
                 current_tokens = 0
 
-            # Split oversized paragraph by sentences
             sentences = re.split(r'(?<=[.!?])\s+', para)
             for sent in sentences:
                 sent_tokens = _count_tokens(sent)
                 if current_tokens + sent_tokens > chunk_size and current_parts:
                     chunks.append(" ".join(current_parts))
-                    # Keep overlap from end
                     overlap_parts = _get_overlap_parts(current_parts, overlap)
                     current_parts = overlap_parts
                     current_tokens = sum(_count_tokens(p) for p in current_parts)
@@ -104,12 +93,9 @@ def _merge_paragraphs_into_chunks(
                 current_tokens += sent_tokens
             continue
 
-        # Would adding this paragraph exceed the chunk size?
         if current_tokens + para_tokens > chunk_size and current_parts:
-            # Flush current chunk
             chunks.append("\n\n".join(current_parts))
 
-            # Build overlap from the tail of the current chunk
             overlap_parts = _get_overlap_parts(current_parts, overlap)
             current_parts = overlap_parts
             current_tokens = sum(_count_tokens(p) for p in current_parts)
@@ -117,7 +103,6 @@ def _merge_paragraphs_into_chunks(
         current_parts.append(para)
         current_tokens += para_tokens
 
-    # Flush remaining
     if current_parts:
         chunks.append("\n\n".join(current_parts))
 
@@ -154,9 +139,9 @@ def chunk_paper(
     Split a paper's full text into overlapping chunks ready for embedding.
 
     Each chunk dict contains:
-        paper_id:     str  — FK to papers table
-        chunk_index:  int  — 0-based position in the paper
-        chunk_text:   str  — the chunk content (prepended with title for context)
+        paper_id:     str - FK to papers table
+        chunk_index:  int - 0-based position in the paper
+        chunk_text:   str - the chunk content (prepended with title for context)
 
     Args:
         full_text:  The PDF-extracted full text of the paper.
@@ -172,14 +157,11 @@ def chunk_paper(
     paragraphs = _split_into_paragraphs(full_text)
     raw_chunks = _merge_paragraphs_into_chunks(paragraphs)
 
-    # Filter out tiny chunks
     chunks = [c for c in raw_chunks if _count_tokens(c) >= MIN_CHUNK_TOKENS]
 
     if not chunks:
         return []
 
-    # Prepend title to each chunk for embedding context
-    # (helps the embedding model understand what paper this chunk belongs to)
     title_prefix = f"[{title}] " if title else ""
 
     result = []
@@ -201,9 +183,9 @@ def batch_chunk_papers(
 
     Args:
         papers: List of paper dicts, each must have:
-            - arxiv_id: str
-            - title: str
-            - full_text: str (optional — papers without it are skipped)
+ - arxiv_id: str
+ - title: str
+ - full_text: str (optional - papers without it are skipped)
 
     Returns:
         Flat list of all chunk dicts across all papers.

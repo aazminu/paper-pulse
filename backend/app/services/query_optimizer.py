@@ -1,5 +1,5 @@
 """
-LLM Query Optimizer — Transforms raw user interest text into
+LLM Query Optimizer - Transforms raw user interest text into
 precision search queries optimized for each academic API.
 
 Uses o4-mini as a classifier/optimizer to:
@@ -59,13 +59,13 @@ Return a JSON object with exactly these fields:
 
 2. "keywords": An array of 6-10 individual technical terms or short phrases (1-3 words each) that are the core concepts. Include abbreviations, model names, and method names that researchers in this field would use (e.g., "GNN", "BERT", "CRISPR", "Monte Carlo").
 
-3. "arxiv_categories": An array of the most specific ArXiv sub-categories that match (e.g., "cs.LG", "cs.CL", "q-bio.BM", "stat.ML"). Use 2-5 categories. Only include categories that genuinely match — do not pad.
+3. "arxiv_categories": An array of the most specific ArXiv sub-categories that match (e.g., "cs.LG", "cs.CL", "q-bio.BM", "stat.ML"). Use 2-5 categories. Only include categories that genuinely match - do not pad.
 
 Rules:
 - Use the technical vocabulary of the field, NOT the user's casual words
 - Search queries should be what a domain expert would type into Google Scholar
 - If the user mentions a broad area, break it into the specific active sub-fields
-- Prefer precision over recall — narrow queries find better papers
+- Prefer precision over recall - narrow queries find better papers
 - Return ONLY the JSON object, no markdown, no explanation"""
 
     try:
@@ -84,7 +84,6 @@ Rules:
 
         raw = response.choices[0].message.content.strip()
 
-        # Strip markdown code fences if present
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
             if raw.endswith("```"):
@@ -93,7 +92,6 @@ Rules:
 
         result = json.loads(raw)
 
-        # Validate structure
         return {
             "search_queries": result.get("search_queries", [])[:5],
             "keywords": result.get("keywords", [])[:10],
@@ -103,7 +101,6 @@ Rules:
     except json.JSONDecodeError as e:
         print(f"[QueryOptimizer] Failed to parse LLM response: {e}")
         print(f"[QueryOptimizer] Raw response: {raw[:200]}")
-        # Fallback: extract simple keywords from interest text
         return _fallback_extract(interest_text)
     except Exception as e:
         print(f"[QueryOptimizer] Error: {e}")
@@ -122,7 +119,6 @@ def _fallback_extract(interest_text: str) -> dict:
     }
     words = [w.strip('.,!?()[]{}"\':;') for w in interest_text.split()]
     keywords = [w for w in words if len(w) > 2 and w.lower() not in stop_words][:10]
-    # Build 2 simple queries by grouping keywords
     queries = []
     if len(keywords) >= 4:
         queries.append(" ".join(keywords[:3]))

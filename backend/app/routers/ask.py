@@ -36,7 +36,6 @@ class AskRequest(BaseModel):
     history: list[dict] | None = None
 
 
-# ── Stop words for title matching ──────────────────────────────────────────
 _STOP_WORDS = {
     "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
     "of", "with", "by", "from", "is", "it", "this", "that", "are", "was",
@@ -60,7 +59,6 @@ def _find_title_matches(question: str, user_id: str) -> list[dict]:
     vector search can miss.
     """
     try:
-        # 1. Get paper IDs in the user's feed
         feed_resp = (
             supabase.table("feed_items")
             .select("paper_id")
@@ -72,7 +70,6 @@ def _find_title_matches(question: str, user_id: str) -> list[dict]:
 
         paper_ids = list({fi["paper_id"] for fi in feed_resp.data})
 
-        # 2. Fetch metadata for all of the user's papers
         papers_resp = (
             supabase.table("papers")
             .select("arxiv_id, title, authors, abstract, url, source, full_text, summary")
@@ -82,7 +79,6 @@ def _find_title_matches(question: str, user_id: str) -> list[dict]:
         if not papers_resp.data:
             return []
 
-        # 3. Score each paper by significant-word overlap with the question
         q_words = {
             w.strip(".,;:!?\"'()-").lower()
             for w in question.split()
@@ -102,7 +98,6 @@ def _find_title_matches(question: str, user_id: str) -> list[dict]:
             overlap = len(q_words & t_words)
             ratio = overlap / len(t_words)
 
-            # Require at least 3 matching words AND 40 % of title words
             if overlap >= 3 and ratio >= 0.4:
                 scored.append((ratio, overlap, paper))
 
@@ -120,7 +115,6 @@ def _retrieve_context(question_vector: list[float], user_id: str, question: str)
     Title matches are always included so explicitly named papers are never missed.
     """
 
-    # ── 1. Title-based lookup ─────────────────────────────────────────────
     title_matches = _find_title_matches(question, user_id)
     if title_matches:
         print(
@@ -128,7 +122,6 @@ def _retrieve_context(question_vector: list[float], user_id: str, question: str)
             + ", ".join(p['title'][:60] for p in title_matches)
         )
 
-    # ── 2. Chunk-level vector search ──────────────────────────────────────
     chunk_results = []
     try:
         chunk_rpc = supabase.rpc(
@@ -178,7 +171,6 @@ def _retrieve_context(question_vector: list[float], user_id: str, question: str)
             paper["full_text"] = "\n\n".join(c["chunk_text"] for c in best_chunks)
             vector_papers.append(paper)
     else:
-        # Fallback: paper-level vector search
         print("  No chunks found, falling back to paper-level search")
         rpc_response = supabase.rpc(
             "match_user_papers",
@@ -195,7 +187,6 @@ def _retrieve_context(question_vector: list[float], user_id: str, question: str)
                 question=question, papers=relevant_papers, top_n=25
             )
 
-    # ── 3. Merge: title matches first, then vector results (deduped) ─────
     seen_ids: set[str] = set()
     merged: list[dict] = []
 
@@ -218,21 +209,18 @@ def _retrieve_context(question_vector: list[float], user_id: str, question: str)
 def ask_question(request: AskRequest):
     """Text-only Q&A endpoint with conversation history and smart retrieval."""
     try:
-        print(f"🤔 User {request.user_id} asked: {request.question}")
+        print(f"User {request.user_id} asked: {request.question}")
 
         history = request.history or []
         intent = classify_query_intent(request.question, len(history) > 0)
         print(f"  Intent: {intent}")
 
-        # General questions (e.g. "what is 9+10") — no retrieval needed
         if intent == "general":
             return answer_question_with_context(request.question, [], history=history)
 
-        # Follow-ups — the model already has context from conversation history
         if intent == "follow_up":
             return answer_question_with_context(request.question, [], history=history)
 
-        # Retrieval — full pipeline
         question_vector = get_embedding(request.question)
         if not question_vector:
             raise HTTPException(status_code=500, detail="Failed to embed question.")
@@ -244,10 +232,9 @@ def ask_question(request: AskRequest):
                 "sources": [],
             }
 
-        # Enrich with knowledge graph context
         graph_context = _get_graph_context([p["arxiv_id"] for p in context_papers])
 
-        print(f"  {len(context_papers)} papers retrieved. Generating answer with gpt-4.1...")
+        print(f"  {len(context_papers)} papers retrieved. Generating answer...")
         return answer_question_with_context(
             request.question, context_papers, history=history,
             graph_context=graph_context,
@@ -276,9 +263,8 @@ async def ask_multimodal(
         parsed_history = []
 
     try:
-        print(f"🤔 Multimodal ask from {user_id}: '{question}' + {len(files)} file(s)")
+        print(f"Multimodal ask from {user_id}: '{question}' + {len(files)} file(s)")
 
-        # Process uploaded files
         attachments: list[dict] = []
         file_text_for_embedding: list[str] = []
 
@@ -301,14 +287,11 @@ async def ask_multimodal(
 
             attachments.append(result)
 
-            # Collect text content for embedding-based retrieval
             if result["type"] == "text" and result.get("content"):
                 file_text_for_embedding.append(result["content"][:2000])
 
-        # Build combined query for retrieval
         combined_query = question
         if file_text_for_embedding:
-            # Add a snippet of file content to improve paper retrieval
             extra = " ".join(file_text_for_embedding)[:500]
             combined_query = f"{question} {extra}".strip()
 
@@ -318,19 +301,16 @@ async def ask_multimodal(
                 "sources": [],
             }
 
-        # Retrieve relevant papers
         question_vector = get_embedding(combined_query)
         if not question_vector:
             raise HTTPException(status_code=500, detail="Failed to embed question.")
 
         context_papers = _retrieve_context(question_vector, user_id, combined_query)
 
-        # Enrich with knowledge graph context
         graph_context = _get_graph_context([p["arxiv_id"] for p in context_papers])
 
         print(f"  {len(context_papers)} papers, {len(attachments)} attachments. Generating answer...")
 
-        # Use multimodal answer function
         return answer_question_multimodal(
             question=question or "Analyze the attached file(s) and relate to my papers.",
             context_papers=context_papers,
@@ -344,10 +324,6 @@ async def ask_multimodal(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# STREAMING (SSE) ENDPOINTS
-# ─────────────────────────────────────────────────────────────────────────────
-
 def _sse(event: str, data) -> str:
     """Format a server-sent event line."""
     payload = _json.dumps(data) if not isinstance(data, str) else data
@@ -358,22 +334,21 @@ def _sse(event: str, data) -> str:
 def ask_stream(request: AskRequest):
     """
     SSE events emitted:
-      stage   → {"stage": "...", "message": "..."}
-      sources → [{paper}, ...]
-      token   → {"t": "..."}
-      done    → {}
-      error   → {"message": "..."}
+      stage -> {"stage": "...", "message": "..."}
+      sources -> [{paper}, ...]
+      token -> {"t": "..."}
+      done -> {}
+      error -> {"message": "..."}
     """
     def generate():
         try:
             history = request.history or []
 
-            # 1. classify
-            yield _sse("stage", {"stage": "classifying", "message": "Understanding your question…"})
+            yield _sse("stage", {"stage": "classifying", "message": "Understanding your question..."})
             intent = classify_query_intent(request.question, len(history) > 0)
 
             if intent in ("general", "follow_up"):
-                label = "Generating answer…" if intent == "general" else "Continuing conversation…"
+                label = "Generating answer..." if intent == "general" else "Continuing conversation..."
                 yield _sse("stage", {"stage": "generating", "message": label})
                 yield _sse("sources", [])
                 for tok in stream_answer_with_context(request.question, [], history=history):
@@ -381,21 +356,18 @@ def ask_stream(request: AskRequest):
                 yield _sse("done", {})
                 return
 
-            # 2. embed + search
-            yield _sse("stage", {"stage": "searching", "message": "Searching your paper library…"})
+            yield _sse("stage", {"stage": "searching", "message": "Searching your paper library..."})
             question_vector = get_embedding(request.question)
             if not question_vector:
                 yield _sse("error", {"message": "Failed to embed question."})
                 return
             context_papers = _retrieve_context(question_vector, request.user_id, request.question)
 
-            # 3. graph
-            yield _sse("stage", {"stage": "graphing", "message": "Querying knowledge graph…"})
+            yield _sse("stage", {"stage": "graphing", "message": "Querying knowledge graph..."})
             graph_context = _get_graph_context(
                 [p["arxiv_id"] for p in context_papers]
             ) if context_papers else ""
 
-            # send sources
             yield _sse("sources", [
                 {
                     "arxiv_id": p.get("arxiv_id", ""),
@@ -408,8 +380,7 @@ def ask_stream(request: AskRequest):
                 for p in context_papers
             ])
 
-            # 4. stream LLM
-            yield _sse("stage", {"stage": "generating", "message": "Generating answer…"})
+            yield _sse("stage", {"stage": "generating", "message": "Generating answer..."})
             for tok in stream_answer_with_context(
                 request.question, context_papers,
                 history=history, graph_context=graph_context,
@@ -443,7 +414,6 @@ async def ask_stream_multimodal(
     except Exception:
         parsed_history = []
 
-    # read file bytes before entering sync generator
     attachments: list[dict] = []
     file_text_parts: list[str] = []
     for upload in files:
@@ -469,14 +439,14 @@ async def ask_stream_multimodal(
                 yield _sse("error", {"message": "Provide a question or attach a file."})
                 return
 
-            yield _sse("stage", {"stage": "searching", "message": "Searching your paper library…"})
+            yield _sse("stage", {"stage": "searching", "message": "Searching your paper library..."})
             question_vector = get_embedding(combined_query)
             if not question_vector:
                 yield _sse("error", {"message": "Failed to embed question."})
                 return
             context_papers = _retrieve_context(question_vector, user_id, combined_query)
 
-            yield _sse("stage", {"stage": "graphing", "message": "Querying knowledge graph…"})
+            yield _sse("stage", {"stage": "graphing", "message": "Querying knowledge graph..."})
             graph_context = _get_graph_context(
                 [p["arxiv_id"] for p in context_papers]
             ) if context_papers else ""
@@ -493,7 +463,7 @@ async def ask_stream_multimodal(
                 for p in context_papers
             ])
 
-            yield _sse("stage", {"stage": "generating", "message": "Generating answer…"})
+            yield _sse("stage", {"stage": "generating", "message": "Generating answer..."})
             final_q = question or "Analyze the attached file(s) and relate to my papers."
             for tok in stream_answer_multimodal(
                 question=final_q,

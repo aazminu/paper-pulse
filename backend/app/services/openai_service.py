@@ -10,31 +10,14 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
     raise ValueError("Missing OpenAI API key. Check your .env file.")
 
-# Initialize the synchronous OpenAI client
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# ---------------------------------------------------------------------------
-# Model Configuration — research-optimised stack
-# ---------------------------------------------------------------------------
-# EMBEDDINGS:  text-embedding-3-large @ 1536-dim
-#   Highest-fidelity OpenAI embedding model.  1536 dims for pgvector compat.
-#
-# Q&A (ASK):   gpt-4.1
-#   OpenAI's best GPT-class model for instruction following and long context.
-#   1M token context window, very high rate limits (no TPM issues), and
-#   superb at following formatting/math instructions precisely.
-#
-# SUMMARIES:   o4-mini  (reasoning_effort="low")
-#   Cost-efficient reasoning model for faithful 3-sentence summaries.
-#
-# RERANKER:    Cohere rerank-v4.0-pro  (configured in rerank_service.py)
-# ---------------------------------------------------------------------------
 EMBEDDING_MODEL = "text-embedding-3-large"
 EMBEDDING_DIMENSIONS = 1536
 QA_MODEL = "gpt-4.1"
 SUMMARY_MODEL = "o4-mini"
-MAX_COMPLETION_TOKENS = 16384     # gpt-4.1 has generous rate limits
-MAX_CONTEXT_TOKENS = 32000        # gpt-4.1 supports up to 1M tokens
+MAX_COMPLETION_TOKENS = 16384     # max output tokens
+MAX_CONTEXT_TOKENS = 32000        # max context window
 _enc = tiktoken.get_encoding("cl100k_base")
 
 
@@ -70,7 +53,6 @@ def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
             model=EMBEDDING_MODEL,
             dimensions=EMBEDDING_DIMENSIONS,
         )
-        # The API may return embeddings out of order; sort by index
         sorted_data = sorted(response.data, key=lambda d: d.index)
         return [d.embedding for d in sorted_data]
     except Exception as e:
@@ -81,7 +63,7 @@ def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
 def generate_paper_summary(abstract: str) -> str:
     """
     Summarizes an academic abstract into exactly 3 plain English sentences
-    using o4-mini at low reasoning effort — fast, cheap, and more faithful
+    using o4-mini at low reasoning effort - fast, cheap, and more faithful
     than GPT-class models for distilling key findings.
     """
     try:
@@ -112,20 +94,20 @@ def classify_query_intent(question: str, has_history: bool) -> str:
     """Decide whether a user question needs paper retrieval.
 
     Returns one of:
-      - "retrieval"  — question asks about a specific paper / research topic
-      - "follow_up"  — references the previous conversation; reuse earlier context
-      - "general"    — no papers needed (math, greetings, chitchat, etc.)
+ - "retrieval" - question asks about a specific paper / research topic
+ - "follow_up" - references the previous conversation; reuse earlier context
+ - "general" - no papers needed (math, greetings, chitchat, etc.)
     """
     try:
         system = (
             "You classify questions for a research-paper Q&A system.\n"
-            "Respond with EXACTLY one word — no punctuation, no explanation:\n"
-            "RETRIEVAL — the question asks about a specific paper, research topic, "
+            "Respond with EXACTLY one word - no punctuation, no explanation:\n"
+            "RETRIEVAL - the question asks about a specific paper, research topic, "
             "or explicitly requests a search of the paper library\n"
-            "FOLLOW_UP — conversation history exists AND this is a follow-up or "
+            "FOLLOW_UP - conversation history exists AND this is a follow-up or "
             "continuation of the previous discussion (e.g. 'tell me more', "
             "'what about X', 'can you simplify that')\n"
-            "GENERAL — a general question unrelated to research papers "
+            "GENERAL - a general question unrelated to research papers "
             "(e.g. math, greetings, jokes, definitions)"
         )
         user_msg = (
@@ -148,7 +130,6 @@ def classify_query_intent(question: str, has_history: bool) -> str:
             return "follow_up"
         return "general"
     except Exception:
-        # Safe default: retrieve if no history, follow-up if there is
         return "retrieval" if not has_history else "follow_up"
 
 
@@ -163,7 +144,7 @@ def generate_chat_title(first_message: str) -> str:
                     "content": (
                         "Generate a concise chat title (3-6 words) for a conversation "
                         "that starts with the user message below. "
-                        "Return ONLY the title — no quotes, no punctuation at the end, "
+                        "Return ONLY the title - no quotes, no punctuation at the end, "
                         "no explanation. Make it descriptive and specific."
                     ),
                 },
@@ -176,11 +157,9 @@ def generate_chat_title(first_message: str) -> str:
         return title[:80] if title else "New Chat"
     except Exception as e:
         print(f"Error generating chat title: {e}")
-        # Fall back to truncating the first message
         return first_message[:50].strip() or "New Chat"
 
 
-# ── Shared system prompt for Q&A ──────────────────────────────────────────
 _QA_SYSTEM_PROMPT = (
     "You are a brilliant, concise research assistant with deep access to the "
     "user's paper library.\n\n"
@@ -189,7 +168,7 @@ _QA_SYSTEM_PROMPT = (
     "like \"Why this paper?\", \"Overview\", \"What I found\", etc.\n"
     "- Explain concepts in your own words. Use analogies, intuition, and plain language.\n"
     "- If you only have an abstract or summary (not full text), STILL explain the paper "
-    "as thoroughly as you can — abstracts contain core contributions, methods, and results.\n"
+    "as thoroughly as you can - abstracts contain core contributions, methods, and results.\n"
     "- If the user asks to explain something simply, genuinely simplify the ideas. "
     "Build from first principles.\n"
     "- Add insight: why does this matter? What is the key intuition?\n"
@@ -198,12 +177,12 @@ _QA_SYSTEM_PROMPT = (
     "Only state what is explicitly in the provided context. If authors aren't listed, say so.\n"
     "- If the question is completely unrelated to every provided paper, say so in one sentence.\n"
     "- Refer to papers naturally by name in italics, like *Modular RADAR*. "
-    "Never write \"(Source: ...)\" or \"(ID: ...)\" — the UI shows sources separately.\n\n"
+    "Never write \"(Source: ...)\" or \"(ID: ...)\" - the UI shows sources separately.\n\n"
     "CONVERSATION CONTEXT:\n"
     "- Previous messages from the conversation may be included. Use them naturally "
     "for follow-up questions.\n"
     "- If a follow-up references something you already explained, USE your previous "
-    "answer — do not say you lack information or need more context.\n"
+    "answer - do not say you lack information or need more context.\n"
     "- Maintain continuity: remember paper names, results, and details from earlier "
     "in the conversation.\n\n"
     "KNOWLEDGE GRAPH:\n"
@@ -215,13 +194,13 @@ _QA_SYSTEM_PROMPT = (
     "lean heavily on graph context.\n\n"
     "FORMATTING:\n"
     "- Full Markdown is rendered. Use rich formatting to make answers scannable:\n"
-    "  - ## and ### subheadings for clear sections (but NOT as the very first line).\n"
-    "  - **Bold** key terms and important takeaways.\n"
-    "  - *Italics* for paper titles.\n"
-    "  - Bullet lists for comparisons, steps, or multiple points.\n"
-    "  - > blockquotes for key definitions or quotes from papers.\n"
+    " - ## and ### subheadings for clear sections (but NOT as the very first line).\n"
+    " - **Bold** key terms and important takeaways.\n"
+    " - *Italics* for paper titles.\n"
+    " - Bullet lists for comparisons, steps, or multiple points.\n"
+    " - > blockquotes for key definitions or quotes from papers.\n"
     "- Keep paragraphs short (2-4 sentences).\n\n"
-    "MATH (critical — follow exactly):\n"
+    "MATH (critical - follow exactly):\n"
     "- Inline math: use single dollar signs with NO spaces after/before: $x^2 + y^2$\n"
     "- Display math: use double dollar signs on their OWN lines, with blank lines around them:\n"
     "\n"
@@ -233,8 +212,8 @@ _QA_SYSTEM_PROMPT = (
     "\n"
     "- NEVER put $$ on the same line as regular text.\n"
     "- NEVER mix $ and $$ in one expression.\n"
-    "- ALL variables must be wrapped: $x$, $k$, $n$ — never as plain text.\n"
-    "- NEVER use Unicode math symbols (², ∝, →, ≤). Always use LaTeX equivalents.\n"
+    "- ALL variables must be wrapped: $x$, $k$, $n$ - never as plain text.\n"
+    "- NEVER use Unicode math symbols (², ∝, ->, ≤). Always use LaTeX equivalents.\n"
     "- Keep LaTeX simple. Prefer \\\\text{} over \\\\mathrm{} for words inside math.\n"
     "- If unsure about complex notation, write it in words rather than risk broken LaTeX."
 )
@@ -249,13 +228,12 @@ def _build_context_text(context_papers: list, max_tokens: int = MAX_CONTEXT_TOKE
     """Build the context block that is sent to the model.
 
     For each paper we include the best available content:
-      - full_text (from PDF extraction / chunks) if it exists
-      - otherwise abstract, plus the GPT-generated summary when available
+ - full_text (from PDF extraction / chunks) if it exists
+ - otherwise abstract, plus the GPT-generated summary when available
 
     Text is truncated per-paper and globally so the total stays under
     *max_tokens*, preventing rate-limit errors.
     """
-    # Per-paper token budget: spread evenly, min 800 per paper
     n_papers = max(len(context_papers), 1)
     per_paper_budget = max(max_tokens // n_papers, 800)
 
@@ -281,8 +259,7 @@ def _build_context_text(context_papers: list, max_tokens: int = MAX_CONTEXT_TOKE
         if paper.get("full_text"):
             ft = paper["full_text"]
             ft_tokens = _count_tokens(ft)
-            if ft_tokens > per_paper_budget - 50:  # reserve room for title+ID
-                # Truncate by decoding back from token list
+            if ft_tokens > per_paper_budget - 50:
                 tokens = _enc.encode(ft, disallowed_special=())
                 ft = _enc.decode(tokens[: per_paper_budget - 50])
                 ft += "\n[...truncated for length]"
@@ -300,7 +277,7 @@ def _build_context_text(context_papers: list, max_tokens: int = MAX_CONTEXT_TOKE
 
         if running_tokens + block_tokens > max_tokens:
             remaining = max_tokens - running_tokens
-            if remaining > 200:  # still worth including a truncated version
+            if remaining > 200:
                 tokens = _enc.encode(block, disallowed_special=())
                 block = _enc.decode(tokens[:remaining])
                 parts.append(block + "\n[...truncated]")
@@ -320,7 +297,7 @@ def _build_messages(
     """Build the OpenAI messages array with optional conversation history."""
     messages: list[dict] = [{"role": "system", "content": system_prompt}]
     if history:
-        for msg in history[-10:]:            # keep last 10 turns
+        for msg in history[-10:]:
             role = "assistant" if msg.get("role") == "assistant" else "user"
             content = msg.get("content", "")
             if len(content) > 3000:
@@ -343,7 +320,6 @@ def answer_question_with_context(
     """
     context_text = _build_context_text(context_papers)
 
-    # Only include the context block when there are papers
     if context_text:
         parts = [f"Context:\n{context_text}"]
         if graph_context:
@@ -488,15 +464,13 @@ def answer_question_multimodal(
     Supports conversation history for follow-up questions.
 
     Accepts text question + optional attachments:
-      - Images (as base64 data URLs) are passed directly as image_url content parts
-      - Extracted text from PDFs/docs/audio/video is prepended to the context
+ - Images (as base64 data URLs) are passed directly as image_url content parts
+ - Extracted text from PDFs/docs/audio/video is prepended to the context
     """
     attachments = attachments or []
 
-    # Build paper context (uses shared helper)
     context_text = _build_context_text(context_papers)
 
-    # Build extra context from non-image attachments
     file_context_parts = []
     for att in attachments:
         if att["type"] == "text" and att.get("content"):
@@ -514,10 +488,8 @@ def answer_question_multimodal(
         "you see and connect it to the relevant papers in their library."
     )
 
-    # Build message content parts (text + images)
     user_content: list[dict] = []
 
-    # Text part: question + paper context + graph context + file context
     text_parts = []
     if context_text:
         text_parts.append(f"Paper Context:\n{context_text}")
@@ -529,7 +501,6 @@ def answer_question_multimodal(
 
     user_content.append({"type": "text", "text": "\n\n".join(text_parts)})
 
-    # Image parts
     for att in attachments:
         if att["type"] == "image" and att.get("data_url"):
             user_content.append({
@@ -552,9 +523,6 @@ def answer_question_multimodal(
         return {"answer": "Sorry, I encountered an error while analyzing your files.", "sources": []}
 
 
-# ---------------------------------------------------------------------------
-# Synthesize Literature Review + Mermaid Citation Diagram
-# ---------------------------------------------------------------------------
 
 _SYNTHESIS_SYSTEM_PROMPT = (
     "You are an expert academic research synthesizer. Given a set of papers with "
@@ -586,7 +554,7 @@ _SYNTHESIS_SYSTEM_PROMPT = (
     "FORMATTING RULES:\n"
     "- Use Markdown: **bold** for key terms, *italics* for paper titles\n"
     "- Keep the total response under 800 words\n"
-    "- Be scholarly but accessible — no unnecessary jargon\n"
+    "- Be scholarly but accessible - no unnecessary jargon\n"
     "- Do NOT include a title heading (the UI provides one)\n"
 )
 
@@ -603,7 +571,6 @@ def synthesize_literature_review(subgraph: dict) -> str:
     if not papers:
         return "No papers provided for synthesis."
 
-    # Build structured context for the LLM
     paper_descriptions = []
     for i, p in enumerate(papers):
         lines = [f"Paper {i+1}: {p['title']}"]
@@ -622,7 +589,6 @@ def synthesize_literature_review(subgraph: dict) -> str:
         lines.append(f"  ID: {p['arxiv_id']}")
         paper_descriptions.append("\n".join(lines))
 
-    # Build citation map
     citation_lines = []
     title_map = {p["arxiv_id"]: p["title"] for p in papers}
     for c in citations:
@@ -652,21 +618,16 @@ def synthesize_literature_review(subgraph: dict) -> str:
         return "Sorry, I encountered an error while generating the literature review."
 
 
-# ---------------------------------------------------------------------------
-# Publication-Ready Multi-Section Literature Review
-# ---------------------------------------------------------------------------
 
 def _generate_bibtex(papers: list[dict]) -> str:
     """Generate BibTeX entries from paper metadata."""
     entries = []
     for i, p in enumerate(papers):
-        # Build a cite key: first author last name + year + letter
         authors = p.get("authors", [])
         first_author_last = authors[0].split()[-1].lower() if authors else "unknown"
         year = p.get("date", "")[:4] if p.get("date") else "n.d."
         cite_key = f"{first_author_last}{year}{chr(97 + i)}"
 
-        # Format authors for BibTeX: "Last, First and Last, First"
         bib_authors = []
         for a in authors:
             parts = a.strip().split()
@@ -696,7 +657,7 @@ def _generate_bibtex(papers: list[dict]) -> str:
         entry += "}"
         entries.append((cite_key, entry))
 
-    return entries  # list of (key, bibtex_string)
+    return entries
 
 
 _PUBLICATION_SYSTEM_PROMPT = (
@@ -763,7 +724,7 @@ _PUBLICATION_SYSTEM_PROMPT = (
     "FORMATTING RULES:\n"
     "- Use proper academic tone throughout\n"
     "- Use **bold** for key terms on first introduction\n"
-    "- Cite papers as [AuthorYear] — EVERY paper must be cited at least once\n"
+    "- Cite papers as [AuthorYear] - EVERY paper must be cited at least once\n"
     "- No bullet-point lists in the main analysis sections (use flowing prose)\n"
     "- Target 1500-2500 words total\n"
     "- Be scholarly, precise, and well-structured\n"
@@ -786,16 +747,13 @@ def synthesize_publication_review(subgraph: dict) -> dict:
             "citation_count": 0,
         }
 
-    # Generate BibTeX entries
     bib_entries = _generate_bibtex(papers)
     bibtex_str = "\n\n".join(entry for _, entry in bib_entries)
 
-    # Build cite-key mapping for the LLM
     cite_key_lines = []
     for (cite_key, _), p in zip(bib_entries, papers):
-        cite_key_lines.append(f"  [{cite_key}] → \"{p['title']}\"")
+        cite_key_lines.append(f"  [{cite_key}] -> \"{p['title']}\"")
 
-    # Build paper descriptions
     paper_descriptions = []
     for i, ((cite_key, _), p) in enumerate(zip(bib_entries, papers)):
         lines = [f"Paper {i+1} [cite as: {cite_key}]: {p['title']}"]
@@ -814,7 +772,6 @@ def synthesize_publication_review(subgraph: dict) -> dict:
         lines.append(f"  ArXiv ID: {p['arxiv_id']}")
         paper_descriptions.append("\n".join(lines))
 
-    # Build citation map
     citation_lines = []
     title_map = {p["arxiv_id"]: p["title"] for p in papers}
     for c in citations:

@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import mermaid from "mermaid";
 
-// Initialize mermaid with a clean config
 mermaid.initialize({
 	startOnLoad: false,
 	theme: "neutral",

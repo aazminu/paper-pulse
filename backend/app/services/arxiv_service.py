@@ -5,15 +5,9 @@ from datetime import datetime
 from typing import List
 import time
 
-# ArXiv API uses specific namespaces for their XML tags
 OAI_NS = {'atom': 'http://www.w3.org/2005/Atom'}
 
-# ---------------------------------------------------------------------------
-# ArXiv API — primary preprint source
-# We fetch in batches to respect the 3-second rate limit while maximizing
-# the number of papers retrieved per pipeline run.
-# ---------------------------------------------------------------------------
-ARXIV_BATCH_SIZE = 100  # Max per single API call (ArXiv cap is ~200)
+ARXIV_BATCH_SIZE = 100  # Max per single API call 
 ARXIV_RATE_LIMIT_SECONDS = 3
 
 
@@ -36,7 +30,6 @@ def fetch_daily_papers(
     if not domains:
         return []
 
-    # Use LLM-optimized sub-categories if available, otherwise broad domains
     if arxiv_categories:
         category_queries = [f"cat:{cat}" for cat in arxiv_categories]
     else:
@@ -49,12 +42,9 @@ def fetch_daily_papers(
 
     cat_part = "+OR+".join(category_queries)
 
-    # When we have optimized search queries, run each query separately and merge
-    # (ArXiv sorts by relevance automatically when a text query is present)
     if search_queries:
         return _fetch_with_queries(cat_part, search_queries, max_results)
 
-    # Fallback: broad category fetch sorted by date
     return _fetch_by_category(cat_part, max_results)
 
 
@@ -69,7 +59,6 @@ def _fetch_with_queries(
     per_query = max(10, max_results // len(search_queries))
 
     for query_text in search_queries:
-        # Build: (cat:cs.LG OR cat:q-bio.BM) AND (all:"deep learning drug discovery")
         encoded_q = urllib.parse.quote(query_text)
         search_query = f"({cat_part})+AND+all:{encoded_q}"
 
@@ -95,7 +84,7 @@ def _fetch_with_queries(
                     if parsed and parsed["arxiv_id"] not in seen_ids:
                         seen_ids.add(parsed["arxiv_id"])
                         papers.append(parsed)
-                break  # success
+                break
 
             except Exception as e:
                 if attempt < 2:

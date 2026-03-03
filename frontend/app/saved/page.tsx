@@ -166,14 +166,14 @@ export default function SavedPage() {
 							Saved Articles
 						</h2>
 						<p className="text-zinc-500 mt-2">
-							Your bookmarked research papers — {saved.length} saved.
+							Your bookmarked research papers - {saved.length} saved.
 						</p>
 					</div>
 					{saved.length > 0 && (
 						<div className="relative w-full sm:w-64">
 							<Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
 							<Input
-								placeholder="Search saved papers…"
+								placeholder="Search saved papers..."
 								value={searchQuery}
 								onChange={(e) => setSearchQuery(e.target.value)}
 								className="pl-9"

@@ -1,20 +1,20 @@
 """
-Graph API Router — Knowledge Graph queries for PaperPulse
+Graph API Router - Knowledge Graph queries for PaperPulse
 
 Endpoints:
-  GET  /graph/paper/{arxiv_id}        — Paper's graph neighborhood
-  GET  /graph/paper/{arxiv_id}/related — Related papers via graph traversal
-  GET  /graph/paper/{arxiv_id}/citations — Citation network for visualization
-  GET  /graph/author/{name}            — Co-author network
-  GET  /graph/concept/{name}           — Papers involving a concept
-  GET  /graph/explore                  — Full graph for explorer view
-  GET  /graph/stats                    — Graph statistics
-  GET  /graph/clusters                 — Auto-detected paper clusters
-  POST /graph/synthesize               — Synthesize literature review from selected nodes
-  GET  /graph/reports                  — List saved synthesis reports
-  POST /graph/reports                  — Save a synthesis report
-  DELETE /graph/reports/{id}           — Delete a saved report
-  POST /graph/populate                 — Trigger graph population manually
+  GET  /graph/paper/{arxiv_id} - Paper's graph neighborhood
+  GET  /graph/paper/{arxiv_id}/related - Related papers via graph traversal
+  GET  /graph/paper/{arxiv_id}/citations - Citation network for visualization
+  GET  /graph/author/{name} - Co-author network
+  GET  /graph/concept/{name} - Papers involving a concept
+  GET  /graph/explore - Full graph for explorer view
+  GET  /graph/stats - Graph statistics
+  GET  /graph/clusters - Auto-detected paper clusters
+  POST /graph/synthesize - Synthesize literature review from selected nodes
+  GET  /graph/reports - List saved synthesis reports
+  POST /graph/reports - Save a synthesis report
+  DELETE /graph/reports/{id} - Delete a saved report
+  POST /graph/populate - Trigger graph population manually
 """
 
 import json as _json
@@ -157,7 +157,6 @@ def synthesize_publication(req: SynthesizeRequest):
     return result
 
 
-# ── Agent Traversal (SSE) ────────────────────────────────────────────────
 
 def _sse(event: str, data) -> str:
     """Format a server-sent event line."""
@@ -191,7 +190,6 @@ def agent_synthesize(req: SynthesizeRequest):
     )
 
 
-# ── Saved Reports ─────────────────────────────────────────────────────────
 
 class SaveReportRequest(BaseModel):
     user_id: str

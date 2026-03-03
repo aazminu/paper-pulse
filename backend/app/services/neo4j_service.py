@@ -26,9 +26,6 @@ NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
 NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
 NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "paperpulse2024")
 
-# ---------------------------------------------------------------------------
-# Driver singleton
-# ---------------------------------------------------------------------------
 _driver = None
 
 
@@ -56,18 +53,13 @@ def get_session():
         session.close()
 
 
-# ---------------------------------------------------------------------------
-# Schema initialisation (constraints + indexes) — idempotent
-# ---------------------------------------------------------------------------
 def init_schema():
     """Create uniqueness constraints & indexes (safe to call repeatedly)."""
     with get_session() as s:
-        # Uniqueness constraints
         s.run("CREATE CONSTRAINT IF NOT EXISTS FOR (p:Paper) REQUIRE p.arxiv_id IS UNIQUE")
         s.run("CREATE CONSTRAINT IF NOT EXISTS FOR (a:Author) REQUIRE a.name_lower IS UNIQUE")
         s.run("CREATE CONSTRAINT IF NOT EXISTS FOR (c:Concept) REQUIRE c.name_lower IS UNIQUE")
         s.run("CREATE CONSTRAINT IF NOT EXISTS FOR (i:Institution) REQUIRE i.name_lower IS UNIQUE")
-        # Full-text indexes for fuzzy search
         try:
             s.run(
                 "CREATE FULLTEXT INDEX paper_title_ft IF NOT EXISTS "
@@ -78,13 +70,10 @@ def init_schema():
                 "FOR (c:Concept) ON EACH [c.name]"
             )
         except Exception:
-            pass  # older Neo4j versions may not support IF NOT EXISTS for FT
-    print("[Neo4j] Schema initialised")
+            pass  # index may already exist
+    print("[Neo4j] Schema initialized")
 
 
-# ---------------------------------------------------------------------------
-# Paper CRUD
-# ---------------------------------------------------------------------------
 def upsert_paper(paper: dict):
     """Merge a Paper node. Returns the node."""
     with get_session() as s:
@@ -131,9 +120,6 @@ def upsert_papers_batch(papers: list[dict]):
         )
 
 
-# ---------------------------------------------------------------------------
-# Author + Authorship
-# ---------------------------------------------------------------------------
 def upsert_authors_for_paper(arxiv_id: str, authors: list[str]):
     """Merge Author nodes and create AUTHORED relationships."""
     with get_session() as s:
@@ -150,9 +136,6 @@ def upsert_authors_for_paper(arxiv_id: str, authors: list[str]):
         )
 
 
-# ---------------------------------------------------------------------------
-# Concepts (entities extracted by LLM)
-# ---------------------------------------------------------------------------
 def upsert_concepts_for_paper(arxiv_id: str, concepts: list[dict]):
     """
     Merge Concept nodes and link to a Paper.
@@ -173,9 +156,6 @@ def upsert_concepts_for_paper(arxiv_id: str, concepts: list[dict]):
         )
 
 
-# ---------------------------------------------------------------------------
-# Institutions
-# ---------------------------------------------------------------------------
 def upsert_institution_for_author(author_name: str, institution: str):
     """Merge Institution node and AFFILIATED_WITH relationship."""
     with get_session() as s:
@@ -211,9 +191,6 @@ def upsert_institutions_batch(affiliations: list[dict]):
         )
 
 
-# ---------------------------------------------------------------------------
-# Citations
-# ---------------------------------------------------------------------------
 def add_citations(citing_arxiv_id: str, cited_arxiv_ids: list[str]):
     """Create CITES relationships between Paper nodes."""
     with get_session() as s:
@@ -229,13 +206,10 @@ def add_citations(citing_arxiv_id: str, cited_arxiv_ids: list[str]):
         )
 
 
-# ---------------------------------------------------------------------------
-# Query helpers
-# ---------------------------------------------------------------------------
 def get_paper_graph(arxiv_id: str) -> dict:
     """
     Retrieve a paper's full graph neighborhood:
-    - authors, concepts, citations (both directions), institutions
+ - authors, concepts, citations (both directions), institutions
     """
     with get_session() as s:
         result = s.run(
@@ -447,7 +421,7 @@ def get_graph_context_for_query(paper_ids: list[str]) -> str:
 
         lines = ["=== Knowledge Graph Context ==="]
         for record in result:
-            lines.append(f"\n📄 {record['title']} ({record['arxiv_id']})")
+            lines.append(f"\n{record['title']} ({record['arxiv_id']})")
             if record["concepts"]:
                 lines.append(f"  Concepts: {', '.join(record['concepts'])}")
             if record["author_info"]:
@@ -472,7 +446,6 @@ def get_full_graph_visualization(limit: int = 200) -> dict:
     Returns papers, authors, concepts, and their relationships.
     """
     with get_session() as s:
-        # Get paper-concept relationships
         result = s.run(
             """
             MATCH (p:Paper)
@@ -507,7 +480,6 @@ def get_full_graph_visualization(limit: int = 200) -> dict:
                 })
                 seen_nodes.add(pid)
 
-            # Author nodes + edges
             for author in record["authors"]:
                 if author:
                     author_id = f"author:{author.lower()}"
@@ -524,7 +496,6 @@ def get_full_graph_visualization(limit: int = 200) -> dict:
                         "type": "authored",
                     })
 
-            # Concept nodes + edges
             for concept in record["concepts"]:
                 if concept["name"]:
                     concept_id = f"concept:{concept['name'].lower()}"
@@ -542,7 +513,6 @@ def get_full_graph_visualization(limit: int = 200) -> dict:
                         "type": "involves",
                     })
 
-            # Citation edges
             for cited_id in record["cites"]:
                 if cited_id:
                     edges.append({
@@ -558,14 +528,13 @@ def detect_clusters(limit: int = 200) -> list[dict]:
     """
     Detect paper clusters based on shared concepts and citations.
     Uses a simple connected-component approach on a paper similarity graph:
-      - Two papers are linked if they share >= 2 concepts or have a citation edge.
+ - Two papers are linked if they share >= 2 concepts or have a citation edge.
     Returns a list of clusters, each with a label (top concepts), member paper IDs,
     and a color index.
     """
     from collections import defaultdict, deque
 
     with get_session() as s:
-        # Fetch papers with their concept lists
         result = s.run(
             """
             MATCH (p:Paper)
@@ -588,7 +557,6 @@ def detect_clusters(limit: int = 200) -> list[dict]:
         if not papers:
             return []
 
-        # Fetch citation edges between these papers
         pids = list(papers.keys())
         cite_result = s.run(
             """
@@ -604,7 +572,6 @@ def detect_clusters(limit: int = 200) -> list[dict]:
             citation_pairs.add((r["from_id"], r["to_id"]))
             citation_pairs.add((r["to_id"], r["from_id"]))  # bidirectional for clustering
 
-    # Build adjacency: papers linked by shared concepts (>= 2) or citations
     adj: dict[str, set[str]] = defaultdict(set)
     pid_list = list(papers.keys())
     for i in range(len(pid_list)):
@@ -615,7 +582,6 @@ def detect_clusters(limit: int = 200) -> list[dict]:
                 adj[a].add(b)
                 adj[b].add(a)
 
-    # BFS for connected components
     visited: set[str] = set()
     clusters_raw: list[list[str]] = []
     for pid in pid_list:
@@ -634,12 +600,10 @@ def detect_clusters(limit: int = 200) -> list[dict]:
                     queue.append(neighbor)
         clusters_raw.append(component)
 
-    # Build cluster output — only clusters with >= 2 papers
     clusters = []
     for idx, members in enumerate(sorted(clusters_raw, key=len, reverse=True)):
         if len(members) < 2:
             continue
-        # Find top concepts across cluster members
         concept_count: dict[str, int] = defaultdict(int)
         for pid in members:
             for c in papers[pid]["concepts"]:
@@ -699,7 +663,6 @@ def get_node_neighborhood(node_id: str, node_type: str) -> dict:
                 "cited_by": [c for c in record["cited_by"] if c["id"]],
             }
         elif node_type == "author":
-            # Remove "author:" prefix
             name = node_id.replace("author:", "", 1)
             result = s.run(
                 """
@@ -750,18 +713,16 @@ def get_subgraph_for_synthesis(node_ids: list[str]) -> dict:
     """
     Given a list of node IDs (paper arxiv_ids, author:xxx, concept:xxx),
     fetch a rich subgraph with papers, their authors, concepts, abstracts,
-    and citation relationships — everything the LLM needs for synthesis.
+    and citation relationships - everything the LLM needs for synthesis.
     """
     if not node_ids:
         return {"papers": [], "citations": []}
 
-    # Separate paper IDs from other node types
     paper_ids = [nid for nid in node_ids if not nid.startswith(("author:", "concept:"))]
     author_names = [nid.replace("author:", "", 1) for nid in node_ids if nid.startswith("author:")]
     concept_names = [nid.replace("concept:", "", 1) for nid in node_ids if nid.startswith("concept:")]
 
     with get_session() as s:
-        # Collect paper IDs from authors and concepts into the paper set
         if author_names:
             res = s.run(
                 """
@@ -784,12 +745,11 @@ def get_subgraph_for_synthesis(node_ids: list[str]) -> dict:
             )
             paper_ids.extend([r["pid"] for r in res if r["pid"]])
 
-        paper_ids = list(set(paper_ids))  # deduplicate
+        paper_ids = list(set(paper_ids))
 
         if not paper_ids:
             return {"papers": [], "citations": []}
 
-        # Fetch full paper details
         result = s.run(
             """
             UNWIND $pids AS pid
@@ -819,7 +779,6 @@ def get_subgraph_for_synthesis(node_ids: list[str]) -> dict:
                 "concepts": [c for c in record["concepts"] if c["name"]],
             })
 
-        # Fetch citations within this subgraph
         cites_result = s.run(
             """
             UNWIND $pids AS pid
@@ -894,7 +853,6 @@ def search_graph_nodes(query: str, limit: int = 20) -> list[dict]:
     with get_session() as s:
         q_lower = query.lower().strip()
 
-        # Search papers by title (contains)
         paper_result = s.run(
             """
             MATCH (p:Paper)
@@ -907,7 +865,6 @@ def search_graph_nodes(query: str, limit: int = 20) -> list[dict]:
         )
         results.extend([dict(r) for r in paper_result])
 
-        # Search authors
         author_result = s.run(
             """
             MATCH (a:Author)
@@ -919,7 +876,6 @@ def search_graph_nodes(query: str, limit: int = 20) -> list[dict]:
         )
         results.extend([dict(r) for r in author_result])
 
-        # Search concepts
         concept_result = s.run(
             """
             MATCH (c:Concept)

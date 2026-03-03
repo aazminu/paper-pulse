@@ -1,13 +1,13 @@
 """
-Multimodal File Processor — Extract content from various file types.
+Multimodal File Processor - Extract content from various file types.
 
 Supports:
-  - Images (PNG, JPG, GIF, WEBP) → passed directly to gpt-4.1 vision
-  - PDFs → text extraction via PyMuPDF
-  - Word documents (.docx) → text extraction via python-docx
-  - Audio (MP3, WAV, M4A, WEBM, OGG) → transcription via Whisper
-  - Video (MP4, MOV, AVI, MKV) → audio track extraction + Whisper
-  - Plain text / code files → read directly
+ - Images (PNG, JPG, GIF, WEBP) -> passed directly to gpt-4.1 vision
+ - PDFs -> text extraction via PyMuPDF
+ - Word documents (.docx) -> text extraction via python-docx
+ - Audio (MP3, WAV, M4A, WEBM, OGG) -> transcription via Whisper
+ - Video (MP4, MOV, AVI, MKV) -> audio track extraction + Whisper
+ - Plain text / code files -> read directly
 """
 
 import io
@@ -25,9 +25,6 @@ load_dotenv()
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# ---------------------------------------------------------------------------
-# Supported MIME types
-# ---------------------------------------------------------------------------
 IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
 PDF_TYPES = {"application/pdf"}
 WORD_TYPES = {
@@ -88,7 +85,6 @@ def process_pdf(file_bytes: bytes) -> dict:
     doc.close()
 
     full_text = "\n\n".join(pages)
-    # Strip null bytes
     full_text = full_text.replace("\u0000", "")
     return {"type": "text", "content": full_text, "label": "PDF Document"}
 
@@ -135,7 +131,6 @@ def process_video(file_bytes: bytes, filename: str) -> dict:
     audio_path = video_path + ".mp3"
 
     try:
-        # Extract audio track with ffmpeg
         result = subprocess.run(
             ["ffmpeg", "-i", video_path, "-vn", "-acodec", "libmp3lame",
              "-q:a", "4", "-y", audio_path],
@@ -180,9 +175,9 @@ def process_file(
 
     Returns:
         dict with:
-          - type: "image" | "text"
-          - For images: data_url (base64 data URL)
-          - For text: content (extracted text), label (human-readable type)
+ - type: "image" | "text"
+ - For images: data_url (base64 data URL)
+ - For text: content (extracted text), label (human-readable type)
         Or None if unsupported.
     """
     category = get_file_category(content_type)

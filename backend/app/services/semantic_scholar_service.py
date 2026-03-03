@@ -24,9 +24,6 @@ S2_BASE_URL = "https://api.semanticscholar.org/graph/v1"
 S2_FIELDS = "paperId,title,abstract,authors,year,url,publicationDate,citationCount,fieldsOfStudy,externalIds"
 S2_RATE_LIMIT = 1.0  # seconds between requests (unauthenticated: 1000 rps shared pool)
 
-# ---------------------------------------------------------------------------
-# Domain → Semantic Scholar "fieldsOfStudy" mapping
-# ---------------------------------------------------------------------------
 DOMAIN_TO_FIELDS = {
     "cs": "Computer Science",
     "math": "Mathematics",
@@ -87,7 +84,6 @@ def _parse_paper(raw: dict) -> Optional[dict]:
 
         authors = [a.get("name", "") for a in (raw.get("authors") or []) if a.get("name")]
 
-        # Parse publication date
         pub_date_str = raw.get("publicationDate")
         if pub_date_str:
             try:
@@ -98,7 +94,6 @@ def _parse_paper(raw: dict) -> Optional[dict]:
             year = raw.get("year")
             published_date = date(year, 1, 1) if year else date.today()
 
-        # Build URL — prefer ArXiv link if available, else Semantic Scholar
         external_ids = raw.get("externalIds") or {}
         arxiv_id = external_ids.get("ArXiv", "")
         if arxiv_id:
@@ -106,7 +101,6 @@ def _parse_paper(raw: dict) -> Optional[dict]:
         else:
             url = raw.get("url") or f"https://www.semanticscholar.org/paper/{paper_id}"
 
-        # Use ArXiv ID if available, otherwise S2 paper ID (prefixed)
         canonical_id = arxiv_id if arxiv_id else f"S2:{paper_id}"
 
         return {
@@ -141,7 +135,6 @@ def fetch_recent_papers(
     if not domains:
         return []
 
-    # Map our domain IDs to S2 fields-of-study keywords
     s2_fields = set()
     for d in domains:
         mapped = DOMAIN_TO_FIELDS.get(d)
@@ -155,21 +148,16 @@ def fetch_recent_papers(
     papers: List[dict] = []
     seen_ids: set = set()
 
-    # Calculate date range
     end_date = date.today()
     start_date = end_date - timedelta(days=days_back)
     year_filter = f"{start_date.year}-{end_date.year}"
 
-    # Build the list of (query_text, field_of_study) pairs to search
     query_pairs: list[tuple[str, str]] = []
     if search_queries:
-        # Optimized: run each LLM query across each relevant field
-        # but limit total combinations
         for query in search_queries:
             for field in s2_fields:
                 query_pairs.append((query, field))
     else:
-        # Fallback: use field name as query
         for field in s2_fields:
             query_pairs.append((field, field))
 
@@ -206,7 +194,7 @@ def fetch_recent_papers(
                     fetch_recent_papers._retries = 0
                     break
                 fetch_recent_papers._retries = retries
-                print(f"  [S2] Rate limited, waiting {retry_after}s (attempt {retries}/3)…")
+                print(f"  [S2] Rate limited, waiting {retry_after}s (attempt {retries}/3)...")
                 time.sleep(retry_after)
                 continue
 

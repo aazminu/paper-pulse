@@ -3,9 +3,7 @@ from typing import List, Optional
 from datetime import date, datetime
 from uuid import UUID
 
-# ----------------------------------
-# USER MODELS
-# ----------------------------------
+
 class UserCreate(BaseModel):
     id: str = Field(..., description="The Clerk User ID")
     email: str
@@ -19,9 +17,7 @@ class UserResponse(BaseModel):
     interest_text: Optional[str]
     created_at: datetime
 
-# ----------------------------------
-# PAPER MODELS
-# ----------------------------------
+
 class PaperCreate(BaseModel):
     arxiv_id: str
     title: str
@@ -46,9 +42,7 @@ class PaperResponse(BaseModel):
     full_text: Optional[str] = None
     created_at: datetime
 
-# ----------------------------------
-# FEED ITEM MODELS
-# ----------------------------------
+
 class FeedItemUpdate(BaseModel):
     is_saved: bool
 
@@ -59,13 +53,9 @@ class FeedItemResponse(BaseModel):
     relevance_score: Optional[float] = None
     is_saved: bool
     created_at: datetime
-    # We embed the actual paper details so the frontend can render the card easily
     paper: Optional[PaperResponse] = None
 
 
-# ----------------------------------
-# CHAT MODELS
-# ----------------------------------
 class ChatCreate(BaseModel):
     user_id: str
 

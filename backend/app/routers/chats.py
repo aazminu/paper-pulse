@@ -1,5 +1,5 @@
 """
-Chat CRUD router — persistent conversations like ChatGPT / Claude.
+Chat CRUD router - persistent conversations like ChatGPT / Claude.
 """
 import json
 from uuid import UUID
@@ -11,7 +11,6 @@ from app.services.openai_service import generate_chat_title
 router = APIRouter(prefix="/chats", tags=["Chats"])
 
 
-# ── Request / response helpers ────────────────────────────────────────────
 class CreateChatRequest(BaseModel):
     user_id: str
 
@@ -26,7 +25,6 @@ class UpdateChatRequest(BaseModel):
     starred: bool | None = None
 
 
-# ── LIST chats ────────────────────────────────────────────────────────────
 @router.get("/")
 def list_chats(user_id: str):
     """Return all chats for a user, starred first, then by most recent."""
@@ -44,7 +42,6 @@ def list_chats(user_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── SEARCH chats / messages ───────────────────────────────────────────────
 @router.get("/search")
 def search_chats(user_id: str, q: str):
     """Search across chat titles and message content for a user.
@@ -53,7 +50,6 @@ def search_chats(user_id: str, q: str):
         raise HTTPException(status_code=400, detail="Query must be at least 2 characters")
     query_term = q.strip().lower()
     try:
-        # 1. Get all user chats
         chats_resp = (
             supabase.table("chats")
             .select("*")
@@ -66,7 +62,6 @@ def search_chats(user_id: str, q: str):
         if not chat_ids:
             return []
 
-        # 2. Search messages via ilike
         messages_resp = (
             supabase.table("chat_messages")
             .select("chat_id, role, content, created_at")
@@ -78,24 +73,21 @@ def search_chats(user_id: str, q: str):
         )
         matched_messages = messages_resp.data or []
 
-        # Build set of chat_ids with message matches and first snippet per chat
         msg_match_map: dict[str, dict] = {}
         for msg in matched_messages:
             cid = msg["chat_id"]
             if cid not in msg_match_map:
-                # Extract a snippet around the match
                 content = msg["content"]
                 idx = content.lower().find(query_term)
                 start = max(0, idx - 40)
                 end = min(len(content), idx + len(query_term) + 40)
-                snippet = ("…" if start > 0 else "") + content[start:end] + ("…" if end < len(content) else "")
+                snippet = ("..." if start > 0 else "") + content[start:end] + ("..." if end < len(content) else "")
                 msg_match_map[cid] = {
                     "snippet": snippet,
                     "role": msg["role"],
                     "match_type": "message",
                 }
 
-        # 3. Build results: title matches + message matches
         results = []
         for chat in all_chats:
             title_match = query_term in chat["title"].lower()
@@ -111,7 +103,6 @@ def search_chats(user_id: str, q: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── CREATE chat ───────────────────────────────────────────────────────────
 @router.post("/")
 def create_chat(req: CreateChatRequest):
     """Create a new empty chat and return it."""
@@ -126,7 +117,6 @@ def create_chat(req: CreateChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── GET single chat with messages ─────────────────────────────────────────
 @router.get("/{chat_id}")
 def get_chat(chat_id: UUID):
     """Return a chat and all its messages ordered chronologically."""
@@ -157,7 +147,6 @@ def get_chat(chat_id: UUID):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── UPDATE chat (title / starred) ────────────────────────────────────────
 @router.patch("/{chat_id}")
 def update_chat(chat_id: UUID, req: UpdateChatRequest):
     """Update chat title and/or starred status."""
@@ -185,7 +174,6 @@ def update_chat(chat_id: UUID, req: UpdateChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── DELETE chat ───────────────────────────────────────────────────────────
 @router.delete("/{chat_id}")
 def delete_chat(chat_id: UUID):
     """Delete a chat and cascade-delete all its messages."""
@@ -201,12 +189,10 @@ def delete_chat(chat_id: UUID):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── ADD message to chat ──────────────────────────────────────────────────
 @router.post("/{chat_id}/messages")
 def add_message(chat_id: UUID, req: SaveMessageRequest):
     """Save a message to an existing chat. Auto-generates title on the first user message."""
     try:
-        # Save the message
         msg_data = {
             "chat_id": str(chat_id),
             "role": req.role,
@@ -220,7 +206,6 @@ def add_message(chat_id: UUID, req: SaveMessageRequest):
             .execute()
         )
 
-        # Auto-generate title if still "New Chat"
         generated_title = None
         if req.content:
             chat_resp = (
@@ -230,8 +215,6 @@ def add_message(chat_id: UUID, req: SaveMessageRequest):
                 .execute()
             )
             if chat_resp.data and chat_resp.data[0]["title"] in ("New Chat", ""):
-                # For user messages use the message itself, for AI messages
-                # fetch the first user message in the conversation
                 title_source = req.content
                 if req.role == "ai":
                     first_msg = (

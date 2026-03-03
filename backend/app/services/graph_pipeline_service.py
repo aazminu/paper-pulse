@@ -3,12 +3,12 @@ Graph Population Pipeline for PaperPulse
 
 Runs after the main daily pipeline to populate the Neo4j knowledge graph:
   1. Upsert all new papers as nodes
-  2. Create author → paper relationships
+  2. Create author -> paper relationships
   3. Extract concepts via LLM and link to papers
   4. Fetch citation data from Semantic Scholar
   5. Optionally fetch institution affiliations from OpenAlex
 
-Designed to be idempotent — safe to re-run on existing data.
+Designed to be idempotent - safe to re-run on existing data.
 """
 
 import json
@@ -34,9 +34,7 @@ load_dotenv()
 
 OPENALEX_MAILTO = os.getenv("OPENALEX_MAILTO", "")
 
-# Max papers to process per run (to control API costs)
 MAX_PAPERS_PER_RUN = 50
-# Max papers to fetch citations for per run (S2 rate limits)
 MAX_CITATION_FETCHES = 30
 
 
@@ -98,18 +96,11 @@ def run_graph_pipeline(paper_ids: list[str] | None = None):
     print("Starting Knowledge Graph Pipeline")
     print("=" * 60)
 
-    # Step 0: Ensure Neo4j schema exists
     init_schema()
 
-    # ------------------------------------------------------------------
-    # Step 1: Get papers to process
-    # ------------------------------------------------------------------
     if paper_ids:
-        # Process specific papers
         query = supabase.table("papers").select("*").in_("arxiv_id", paper_ids)
     else:
-        # Process papers not yet in graph
-        # We'll use a simple heuristic: get recent papers ordered by created_at
         query = (
             supabase.table("papers")
             .select("*")
@@ -125,16 +116,10 @@ def run_graph_pipeline(paper_ids: list[str] | None = None):
 
     print(f"Processing {len(papers)} papers for knowledge graph")
 
-    # ------------------------------------------------------------------
-    # Step 2: Upsert paper nodes
-    # ------------------------------------------------------------------
     print("\n--- Step 1: Upserting paper nodes ---")
     upsert_papers_batch(papers)
     print(f"  Upserted {len(papers)} paper nodes")
 
-    # ------------------------------------------------------------------
-    # Step 3: Create author relationships
-    # ------------------------------------------------------------------
     print("\n--- Step 2: Creating author relationships ---")
     for paper in papers:
         authors = paper.get("authors", [])
@@ -142,9 +127,6 @@ def run_graph_pipeline(paper_ids: list[str] | None = None):
             upsert_authors_for_paper(paper["arxiv_id"], authors)
     print(f"  Processed authors for {len(papers)} papers")
 
-    # ------------------------------------------------------------------
-    # Step 4: LLM entity extraction (concepts)
-    # ------------------------------------------------------------------
     print("\n--- Step 3: Extracting concepts via LLM ---")
     entities_map = batch_extract_entities(papers)
 
@@ -166,9 +148,6 @@ def run_graph_pipeline(paper_ids: list[str] | None = None):
 
     print(f"  Extracted {concept_count} concepts across {len(entities_map)} papers")
 
-    # ------------------------------------------------------------------
-    # Step 5: Fetch citations from Semantic Scholar
-    # ------------------------------------------------------------------
     print("\n--- Step 4: Fetching citation data ---")
     citation_papers = papers[:MAX_CITATION_FETCHES]
     citation_map = batch_fetch_citations(citation_papers)
@@ -182,7 +161,6 @@ def run_graph_pipeline(paper_ids: list[str] | None = None):
             add_citations(pid, refs)
             citation_edges += len(refs)
 
-        # Reverse: papers that cite this one
         if cites:
             for citing_id in cites:
                 add_citations(citing_id, [pid])
@@ -190,9 +168,6 @@ def run_graph_pipeline(paper_ids: list[str] | None = None):
 
     print(f"  Created {citation_edges} citation edges")
 
-    # ------------------------------------------------------------------
-    # Step 6: Fetch institution affiliations from OpenAlex
-    # ------------------------------------------------------------------
     print("\n--- Step 5: Fetching institution affiliations ---")
     papers_with_dois = [p for p in papers if p.get("doi")]
     if papers_with_dois:
@@ -204,9 +179,6 @@ def run_graph_pipeline(paper_ids: list[str] | None = None):
 
     print(f"  Stored {len(all_affiliations)} author-institution affiliations")
 
-    # ------------------------------------------------------------------
-    # Summary
-    # ------------------------------------------------------------------
     stats = get_graph_stats()
     print(f"\n{'=' * 60}")
     print("Knowledge Graph Pipeline Complete!")

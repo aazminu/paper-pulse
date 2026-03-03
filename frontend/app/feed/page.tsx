@@ -141,11 +141,10 @@ export default function FeedPage() {
 			}));
 	}, [feed]);
 
-	/* ── Track which section is in view ──────────────────────────────── */
+	/* Track which section is in view */
 	useEffect(() => {
 		if (dateGroups.length === 0) return;
 
-		// Set first date as active by default
 		if (!activeDate && dateGroups.length > 0) {
 			setActiveDate(dateGroups[0].date);
 		}
@@ -241,7 +240,7 @@ export default function FeedPage() {
 							Your Research Feed
 						</h2>
 						<p className="text-zinc-500 mt-2">
-							AI-curated from ArXiv, Semantic Scholar, PubMed &amp; OpenAlex —
+							AI-curated from ArXiv, Semantic Scholar, PubMed &amp; OpenAlex -
 							ranked by your research interests.
 						</p>
 					</div>

@@ -50,7 +50,7 @@ const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
 
 const API = process.env.NEXT_PUBLIC_API_URL;
 
-/* ── Types ── */
+/* Types */
 interface GraphNode {
 	id: string;
 	label: string;
@@ -126,7 +126,7 @@ interface SavedReport {
 	created_at: string;
 }
 
-/* ── Constants ── */
+/* Constants */
 const NODE_COLORS: Record<string, string> = {
 	paper: "#3b82f6",
 	author: "#a855f7",
@@ -159,7 +159,7 @@ const TYPE_ICONS = {
 	concept: Lightbulb,
 };
 
-/* ── Helper ── */
+/* Helper */
 const getEdgeId = (val: string | GraphNode): string =>
 	typeof val === "string" ? val : val.id;
 
@@ -170,7 +170,7 @@ export default function GraphPage() {
 	const graphRef = useRef<any>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
 
-	/* ── State ── */
+	/* State */
 	const [graphData, setGraphData] = useState<GraphData>({
 		nodes: [],
 		edges: [],
@@ -240,7 +240,7 @@ export default function GraphPage() {
 	const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const searchInputRef = useRef<HTMLInputElement>(null);
 
-	/* ── Resize observer ── */
+	/* Resize observer */
 	useEffect(() => {
 		if (!containerRef.current) return;
 		const el = containerRef.current;
@@ -254,7 +254,7 @@ export default function GraphPage() {
 		return () => observer.disconnect();
 	}, [isLoaded]);
 
-	/* ── Fetch graph data ── */
+	/* Fetch graph data */
 	useEffect(() => {
 		if (!isLoaded) return;
 		const fetchGraph = async () => {
@@ -277,7 +277,7 @@ export default function GraphPage() {
 		fetchGraph();
 	}, [isLoaded]);
 
-	/* ── Fetch clusters ── */
+	/* Fetch clusters */
 	useEffect(() => {
 		if (loading || graphData.nodes.length === 0) return;
 		const fetchClusters = async () => {
@@ -296,7 +296,7 @@ export default function GraphPage() {
 		fetchClusters();
 	}, [loading, graphData.nodes.length]);
 
-	/* ── Fetch saved reports ── */
+	/* Fetch saved reports */
 	useEffect(() => {
 		if (!user?.id) return;
 		const fetchReports = async () => {
@@ -312,7 +312,7 @@ export default function GraphPage() {
 		fetchReports();
 	}, [user?.id]);
 
-	/* ── Search debounce ── */
+	/* Search debounce */
 	useEffect(() => {
 		if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
 		if (!searchQuery.trim()) {
@@ -339,7 +339,7 @@ export default function GraphPage() {
 		};
 	}, [searchQuery]);
 
-	/* ── Node details fetch ── */
+	/* Node details fetch */
 	const fetchNodeDetails = useCallback(async (node: GraphNode) => {
 		setDetailsLoading(true);
 		setNodeDetails(null);
@@ -354,7 +354,7 @@ export default function GraphPage() {
 		setDetailsLoading(false);
 	}, []);
 
-	/* ── Highlight neighbors on hover ── */
+	/* Highlight neighbors on hover */
 	const getNeighborIds = useCallback(
 		(nodeId: string): Set<string> => {
 			const ids = new Set<string>([nodeId]);
@@ -383,13 +383,12 @@ export default function GraphPage() {
 		[getNeighborIds],
 	);
 
-	/* ── Click handlers ── */
+	/* Click handlers */
 	const handleNodeClick = useCallback(
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		(node: any) => {
 			const gn = node as GraphNode;
 
-			// Select-mode: toggle in selection set instead of opening detail panel
 			if (selectMode) {
 				setSelectedForSynthesis((prev) => {
 					const next = new Set(prev);
@@ -414,12 +413,10 @@ export default function GraphPage() {
 		(result: SearchResult) => {
 			setSearchQuery("");
 			setSearchOpen(false);
-			// Find the node in graph data
 			const node = graphData.nodes.find((n) => n.id === result.id);
 			if (node) {
 				handleNodeClick(node);
 			} else {
-				// Node might not be in current view — create a temporary one
 				setSelectedNode({
 					id: result.id,
 					label: result.label,
@@ -437,7 +434,7 @@ export default function GraphPage() {
 		[graphData.nodes, handleNodeClick, fetchNodeDetails],
 	);
 
-	/* ── Graph controls ── */
+	/* Graph controls */
 	const handleZoomIn = () =>
 		graphRef.current?.zoom(graphRef.current.zoom() * 1.5, 400);
 	const handleZoomOut = () =>
@@ -448,7 +445,7 @@ export default function GraphPage() {
 		setNodeDetails(null);
 	};
 
-	/* ── Synthesize controls ── */
+	/* Synthesize controls */
 	const toggleSelectMode = useCallback(() => {
 		setSelectMode((prev) => {
 			if (prev) setSelectedForSynthesis(new Set()); // exiting: clear selection
@@ -470,7 +467,6 @@ export default function GraphPage() {
 		setStreamingText("");
 
 		if (reportMode === "agent") {
-			// SSE streaming agent traversal
 			try {
 				const res = await fetch(`${API}/graph/agent-synthesize`, {
 					method: "POST",
@@ -594,7 +590,7 @@ export default function GraphPage() {
 		URL.revokeObjectURL(url);
 	}, [bibtexData]);
 
-	/* ── Export graph as PNG ── */
+	/* Export graph as PNG */
 	const handleExportImage = useCallback(() => {
 		if (!graphRef.current) return;
 		const canvas =
@@ -608,14 +604,14 @@ export default function GraphPage() {
 		a.click();
 	}, []);
 
-	/* ── Save report ── */
+	/* Save report */
 	const handleSaveReport = useCallback(async () => {
 		if (!synthesisReport || !user?.id) return;
 		setSavingReport(true);
 		try {
 			const titleMatch = synthesisReport.match(/^#\s+(.+)$/m);
 			const title =
-				titleMatch?.[1] || `Report — ${selectedForSynthesis.size} papers`;
+				titleMatch?.[1] || `Report - ${selectedForSynthesis.size} papers`;
 			const res = await fetch(`${API}/graph/reports`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
@@ -640,7 +636,7 @@ export default function GraphPage() {
 		setSavingReport(false);
 	}, [synthesisReport, user?.id, selectedForSynthesis]);
 
-	/* ── Delete saved report ── */
+	/* Delete saved report */
 	const handleDeleteReport = useCallback(async (reportId: string) => {
 		try {
 			await fetch(`${API}/graph/reports/${reportId}`, { method: "DELETE" });
@@ -650,7 +646,7 @@ export default function GraphPage() {
 		}
 	}, []);
 
-	/* ── Re-save a viewed report ── */
+	/* Re-save a viewed report */
 	const handleResaveReport = useCallback(async () => {
 		if (!viewingReport || !user?.id) return;
 		setSavingReport(true);
@@ -678,7 +674,7 @@ export default function GraphPage() {
 		setSavingReport(false);
 	}, [viewingReport, user?.id]);
 
-	/* ── Synthesize a cluster ── */
+	/* Synthesize a cluster */
 	const handleSynthesizeCluster = useCallback(
 		(cluster: Cluster) => {
 			setSelectedForSynthesis(new Set(cluster.paper_ids));
@@ -694,7 +690,6 @@ export default function GraphPage() {
 			setStreamingText("");
 
 			if (reportMode === "agent") {
-				// For agent mode, delegate to the SSE streaming handler
 				(async () => {
 					try {
 						const res = await fetch(`${API}/graph/agent-synthesize`, {
@@ -791,7 +786,7 @@ export default function GraphPage() {
 		[reportMode],
 	);
 
-	/* ── Toggle helpers ── */
+	/* Toggle helpers */
 	const toggleNodeType = useCallback((type: string) => {
 		setHiddenNodeTypes((prev) => {
 			const next = new Set(prev);
@@ -817,7 +812,6 @@ export default function GraphPage() {
 			else next.add(nodeId);
 			return next;
 		});
-		// If the hidden node is currently selected, deselect it
 		setSelectedNode((sel) => (sel?.id === nodeId ? null : sel));
 		setNodeDetails((det) => (det?.id === nodeId ? null : det));
 	}, []);
@@ -829,29 +823,25 @@ export default function GraphPage() {
 		hiddenEdgeTypes.size > 0 ||
 		hiddenNodes.size > 0;
 
-	/* ── Filtered data ── */
+	/* Filtered data */
 	const filteredData = useMemo(() => {
 		let nodes = graphData.nodes;
 		let edges = graphData.edges;
 
-		// Node-type filter (multi-toggle)
 		if (hiddenNodeTypes.size > 0) {
 			nodes = nodes.filter((n) => !hiddenNodeTypes.has(n.type));
 		}
 
-		// Hidden individual nodes
 		if (hiddenNodes.size > 0) {
 			nodes = nodes.filter((n) => !hiddenNodes.has(n.id));
 		}
 
-		// Ensure edges connect visible nodes only
 		const nodeIds = new Set(nodes.map((n) => n.id));
 		edges = edges.filter(
 			(e) =>
 				nodeIds.has(getEdgeId(e.source)) && nodeIds.has(getEdgeId(e.target)),
 		);
 
-		// Hidden edge types
 		if (hiddenEdgeTypes.size > 0) {
 			edges = edges.filter((e) => !hiddenEdgeTypes.has(e.type));
 		}
@@ -859,7 +849,7 @@ export default function GraphPage() {
 		return { nodes, links: edges };
 	}, [graphData, hiddenNodeTypes, hiddenNodes, hiddenEdgeTypes]);
 
-	/* ── Canvas painting ── */
+	/* Canvas painting */
 	const paintNode = useCallback(
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		(node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
@@ -884,7 +874,6 @@ export default function GraphPage() {
 							? baseSize * 1.4
 							: baseSize;
 
-			// Glow effect
 			if (isSelected || isHovered) {
 				ctx.beginPath();
 				ctx.arc(node.x!, node.y!, size + 4, 0, 2 * Math.PI);
@@ -903,7 +892,6 @@ export default function GraphPage() {
 				ctx.fill();
 			}
 
-			// Node circle
 			ctx.beginPath();
 			ctx.arc(node.x!, node.y!, size, 0, 2 * Math.PI);
 			ctx.fillStyle = isDimmed
@@ -911,14 +899,12 @@ export default function GraphPage() {
 				: NODE_COLORS[n.type] || "#666";
 			ctx.fill();
 
-			// Selected ring
 			if (isSelected) {
 				ctx.strokeStyle = "#fff";
 				ctx.lineWidth = 2 / globalScale;
 				ctx.stroke();
 			}
 
-			// Synthesis selection indicator — pulsing dashed ring
 			if (isMarkedForSynthesis) {
 				ctx.beginPath();
 				ctx.arc(node.x!, node.y!, size + 3, 0, 2 * Math.PI);
@@ -928,19 +914,17 @@ export default function GraphPage() {
 				ctx.stroke();
 				ctx.setLineDash([]);
 
-				// Small checkmark dot
 				ctx.beginPath();
 				ctx.arc(node.x! + size + 1, node.y! - size - 1, 2.5, 0, 2 * Math.PI);
 				ctx.fillStyle = "#f59e0b";
 				ctx.fill();
 			}
 
-			// Labels
 			if (showLabels && (globalScale > 1.5 || isSelected || isHovered)) {
 				const label = n.label || n.id;
 				const maxLen = isSelected || isHovered ? 50 : 25;
 				const displayLabel =
-					label.length > maxLen ? label.slice(0, maxLen) + "…" : label;
+					label.length > maxLen ? label.slice(0, maxLen) + "..." : label;
 				const fontSize = Math.max(
 					(isSelected || isHovered ? 12 : 10) / globalScale,
 					1.5,
@@ -949,7 +933,6 @@ export default function GraphPage() {
 				ctx.textAlign = "center";
 				ctx.textBaseline = "top";
 
-				// Text background
 				const textWidth = ctx.measureText(displayLabel).width;
 				const padding = 2 / globalScale;
 				const isDark = document.documentElement.classList.contains("dark");
@@ -976,7 +959,7 @@ export default function GraphPage() {
 		],
 	);
 
-	/* ── Render ── */
+	/* Render */
 	if (!isLoaded) return null;
 
 	const TypeIcon = (type: string) =>
@@ -1022,7 +1005,7 @@ export default function GraphPage() {
 								value={searchQuery}
 								onChange={(e) => setSearchQuery(e.target.value)}
 								onFocus={() => searchResults.length > 0 && setSearchOpen(true)}
-								placeholder="Search papers, authors, concepts…"
+								placeholder="Search papers, authors, concepts..."
 								className="w-48 sm:w-64 bg-transparent text-sm placeholder:text-zinc-400 focus:outline-none"
 							/>
 							{searchQuery && (
@@ -1077,7 +1060,7 @@ export default function GraphPage() {
 
 			{/* Body */}
 			<div className="flex flex-1 min-h-0 overflow-hidden">
-				{/* ── Sidebar ── */}
+				{/* Sidebar */}
 				{sidebarOpen && (
 					<aside className="w-72 border-r bg-white dark:bg-zinc-950 flex flex-col overflow-y-auto shrink-0">
 						<div className="p-4 space-y-4">
@@ -1245,7 +1228,7 @@ export default function GraphPage() {
 										{clustersLoading ? (
 											<div className="flex items-center gap-2 py-2 text-zinc-400 text-xs">
 												<Loader2 className="h-3 w-3 animate-spin" />
-												Finding related paper groups…
+												Finding related paper groups...
 											</div>
 										) : clusters.length === 0 ? (
 											<p className="text-[10px] text-zinc-400 py-1">
@@ -1391,7 +1374,7 @@ export default function GraphPage() {
 					</aside>
 				)}
 
-				{/* ── Graph Canvas ── */}
+				{/* Graph Canvas */}
 				<main
 					ref={containerRef}
 					className="flex-1 relative min-h-0 min-w-0 overflow-hidden"
@@ -1407,7 +1390,7 @@ export default function GraphPage() {
 						/>
 					</button>
 
-					{/* Graph controls — positioned to dodge the detail panel */}
+					{/* Graph controls - positioned to dodge the detail panel */}
 					<div
 						className={`absolute top-3 z-30 flex items-center gap-1.5 transition-all ${selectedNode ? "right-[21rem]" : "right-3"}`}
 					>
@@ -1439,7 +1422,7 @@ export default function GraphPage() {
 							}
 						>
 							<MousePointerClick className="h-3.5 w-3.5" />
-							{selectMode ? "Selecting…" : "Generate Review"}
+							{selectMode ? "Selecting..." : "Generate Review"}
 						</button>
 
 						<div className="bg-white dark:bg-zinc-900 rounded-lg border shadow-sm flex items-center">
@@ -1479,7 +1462,7 @@ export default function GraphPage() {
 							<div className="text-center space-y-3">
 								<Network className="h-12 w-12 text-zinc-300 mx-auto animate-pulse" />
 								<p className="text-sm text-zinc-500">
-									Loading knowledge graph…
+									Loading knowledge graph...
 								</p>
 							</div>
 						</div>
@@ -1580,7 +1563,7 @@ export default function GraphPage() {
 						</div>
 					)}
 
-					{/* ── Synthesis selection bar ── */}
+					{/* Synthesis selection bar */}
 					{selectMode && (
 						<div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 bg-white dark:bg-zinc-900 border border-amber-300 dark:border-amber-700 rounded-xl px-4 py-2.5 shadow-lg shadow-amber-100 dark:shadow-amber-900/20">
 							<div className="flex items-center gap-2">
@@ -1664,7 +1647,7 @@ export default function GraphPage() {
 						</div>
 					)}
 
-					{/* ── Detail Panel ── */}
+					{/* Detail Panel */}
 					{selectedNode && (
 						<div className="absolute top-0 right-0 w-80 h-full bg-white dark:bg-zinc-950 border-l shadow-xl overflow-y-auto z-20">
 							<div className="p-4 space-y-4">
@@ -1727,7 +1710,7 @@ export default function GraphPage() {
 								{detailsLoading && (
 									<div className="flex items-center gap-2 py-4 text-zinc-400 text-sm">
 										<Loader2 className="h-4 w-4 animate-spin" />
-										Loading details…
+										Loading details...
 									</div>
 								)}
 
@@ -2055,7 +2038,7 @@ export default function GraphPage() {
 					)}
 				</main>
 
-				{/* ── Synthesis Report Panel ── */}
+				{/* Synthesis Report Panel */}
 				{reportOpen && (
 					<div className="fixed inset-0 z-50 flex justify-end">
 						{/* Backdrop */}
@@ -2213,7 +2196,7 @@ export default function GraphPage() {
 												<div className="flex items-center gap-3 text-violet-600 dark:text-violet-400">
 													<Brain className="h-5 w-5 animate-pulse" />
 													<p className="text-sm font-semibold">
-														AI is analyzing connections between papers…
+														AI is analyzing connections between papers...
 													</p>
 												</div>
 
@@ -2243,7 +2226,7 @@ export default function GraphPage() {
 															AI thinking
 														</p>
 														{agentThought.slice(0, 200)}
-														{agentThought.length > 200 ? "…" : ""}
+														{agentThought.length > 200 ? "..." : ""}
 													</div>
 												)}
 
@@ -2278,7 +2261,7 @@ export default function GraphPage() {
 														<div className="flex items-center gap-2 mb-3">
 															<Loader2 className="h-4 w-4 animate-spin text-violet-500" />
 															<p className="text-xs font-semibold text-zinc-500">
-																Writing review…
+																Writing review...
 															</p>
 														</div>
 														<article className="prose prose-zinc dark:prose-invert prose-sm max-w-none prose-headings:text-base prose-headings:font-semibold prose-p:leading-relaxed prose-li:leading-relaxed prose-pre:bg-transparent prose-pre:p-0">
@@ -2382,8 +2365,8 @@ export default function GraphPage() {
 													<Loader2 className="h-5 w-5 animate-spin text-amber-500" />
 													<p className="text-sm font-medium">
 														{reportMode === "publication"
-															? "Generating a detailed academic review — this may take a moment…"
-															: "Reading your papers and writing a review…"}
+															? "Generating a detailed academic review - this may take a moment..."
+															: "Reading your papers and writing a review..."}
 													</p>
 												</div>
 												{/* Skeleton shimmer */}
@@ -2511,7 +2494,6 @@ export default function GraphPage() {
 																return <MermaidRenderer code={codeStr} />;
 															}
 
-															// Inline code
 															if (!match) {
 																return (
 																	<code
@@ -2523,7 +2505,6 @@ export default function GraphPage() {
 																);
 															}
 
-															// Block code (non-mermaid)
 															return (
 																<pre className="rounded-lg border bg-zinc-50 dark:bg-zinc-900 p-4 overflow-x-auto">
 																	<code
@@ -2549,7 +2530,7 @@ export default function GraphPage() {
 				)}
 			</div>
 
-			{/* ── Saved Reports Drawer ── */}
+			{/* Saved Reports Drawer */}
 			{reportsOpen && (
 				<div className="fixed inset-0 z-50 flex justify-end">
 					<div
@@ -2637,7 +2618,7 @@ export default function GraphPage() {
 				</div>
 			)}
 
-			{/* ── Viewing a Saved Report ── */}
+			{/* Viewing a Saved Report */}
 			{viewingReport && (
 				<div className="fixed inset-0 z-50 flex justify-end">
 					<div

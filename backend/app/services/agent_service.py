@@ -22,14 +22,8 @@ from app.services.neo4j_service import (
     get_subgraph_for_synthesis,
 )
 
-# ---------------------------------------------------------------------------
-# Max iterations to prevent runaway loops
-# ---------------------------------------------------------------------------
 MAX_AGENT_STEPS = 15
 
-# ---------------------------------------------------------------------------
-# Tool definitions (OpenAI function-calling schema)
-# ---------------------------------------------------------------------------
 AGENT_TOOLS = [
     {
         "type": "function",
@@ -162,7 +156,7 @@ AGENT_TOOLS = [
             "description": (
                 "Record an important finding, pattern, or insight discovered "
                 "during graph traversal. Call this whenever you identify something "
-                "noteworthy — a research theme, gap, methodological pattern, "
+                "noteworthy - a research theme, gap, methodological pattern, "
                 "emerging trend, surprising connection, or contradiction."
             ),
             "parameters": {
@@ -217,9 +211,6 @@ AGENT_TOOLS = [
     },
 ]
 
-# ---------------------------------------------------------------------------
-# Agent system prompt
-# ---------------------------------------------------------------------------
 _AGENT_SYSTEM_PROMPT = """\
 You are a research agent systematically exploring an academic knowledge graph.
 Your goal is to traverse the graph starting from seed papers, discover
@@ -238,17 +229,14 @@ EXPLORATION STRATEGY:
 GUIDELINES:
 - Be strategic: focus on the most promising research threads rather than
   exploring every path. Quality over breadth.
-- Record findings frequently — at least 3-4 findings before finishing.
+- Record findings frequently - at least 3-4 findings before finishing.
 - Follow 2-3 research threads deeply rather than skimming everything.
 - When you find a shared concept, investigate which papers involve it.
 - When you find a citation chain, trace it to understand influence.
 - Note methodological patterns, thematic clusters, and research gaps.
-- You have a maximum of {max_steps} tool calls — plan accordingly.
+- You have a maximum of {max_steps} tool calls - plan accordingly.
 """
 
-# ---------------------------------------------------------------------------
-# Final synthesis prompt (after agent exploration)
-# ---------------------------------------------------------------------------
 _SYNTHESIS_FROM_EXPLORATION_PROMPT = """\
 You just finished exploring an academic knowledge graph. Based on the papers
 you examined and the findings you recorded, write a comprehensive literature
@@ -279,7 +267,7 @@ describe which papers contribute and how they relate.
 Compare and contrast the methodologies and approaches found across papers.
 
 ## Research Connections
-Describe how the papers connect — citation chains, shared concepts,
+Describe how the papers connect - citation chains, shared concepts,
 collaborating authors. Include a Mermaid diagram showing key connections:
 
 ```mermaid
@@ -304,9 +292,6 @@ RULES:
 """
 
 
-# ---------------------------------------------------------------------------
-# Tool execution — maps function names to actual graph queries
-# ---------------------------------------------------------------------------
 def _execute_tool(name: str, arguments: dict) -> str:
     """Execute a graph-query tool and return the result as a JSON string."""
     try:
@@ -340,7 +325,6 @@ def _execute_tool(name: str, arguments: dict) -> str:
             return json.dumps(results, default=str)
 
         elif name == "record_finding":
-            # No graph query — just acknowledge the recording
             return json.dumps({"status": "recorded", "category": arguments["category"]})
 
         elif name == "finish_exploration":
@@ -353,9 +337,6 @@ def _execute_tool(name: str, arguments: dict) -> str:
         return json.dumps({"error": str(e)})
 
 
-# ---------------------------------------------------------------------------
-# Tool call description (for SSE progress messages)
-# ---------------------------------------------------------------------------
 _TOOL_DESCRIPTIONS = {
     "get_paper_details": "Examining paper details",
     "find_related_papers": "Discovering related papers",
@@ -388,9 +369,6 @@ def _describe_tool_call(name: str, arguments: dict) -> str:
     return base
 
 
-# ---------------------------------------------------------------------------
-# Main agent loop — yields SSE-ready dicts
-# ---------------------------------------------------------------------------
 def run_agent_traversal(
     node_ids: list[str],
 ) -> Generator[dict, None, None]:
@@ -405,10 +383,9 @@ def run_agent_traversal(
       {"event": "done",      "data": {"markdown": str}}
       {"event": "error",     "data": {"message": str}}
     """
-    # ── 1. Fetch seed subgraph for context ──
     yield {"event": "step", "data": {
         "step": 0, "action": "Initializing",
-        "detail": f"Loading {len(node_ids)} seed nodes from graph…",
+        "detail": f"Loading {len(node_ids)} seed nodes from graph...",
     }}
 
     subgraph = get_subgraph_for_synthesis(node_ids)
@@ -417,7 +394,6 @@ def run_agent_traversal(
         yield {"event": "error", "data": {"message": "No papers found for selected nodes."}}
         return
 
-    # Build an overview of seed papers for the first user message
     seed_descriptions = []
     for p in seed_papers:
         desc = f"- {p['title']} (ID: {p['arxiv_id']})"
@@ -429,7 +405,6 @@ def run_agent_traversal(
                 desc += f"  Concepts: {', '.join(concept_names[:6])}"
         seed_descriptions.append(desc)
 
-    # ── 2. Initialize conversation ──
     system_prompt = _AGENT_SYSTEM_PROMPT.format(max_steps=MAX_AGENT_STEPS)
     messages = [
         {"role": "system", "content": system_prompt},
@@ -452,7 +427,6 @@ def run_agent_traversal(
     step_count = 0
     finished = False
 
-    # ── 3. Agent loop ──
     while step_count < MAX_AGENT_STEPS and not finished:
         try:
             response = client.chat.completions.create(
@@ -468,14 +442,12 @@ def run_agent_traversal(
 
         choice = response.choices[0]
 
-        # If the model wants to say something (content), stream it as thought
         if choice.message.content:
             yield {"event": "thought", "data": {"content": choice.message.content}}
             exploration_log.append(f"[Thought] {choice.message.content}")
 
-        # Process tool calls
         if choice.message.tool_calls:
-            messages.append(choice.message)  # add assistant message with tool_calls
+            messages.append(choice.message)
 
             for tool_call in choice.message.tool_calls:
                 step_count += 1
@@ -493,13 +465,11 @@ def run_agent_traversal(
                 }}
                 exploration_log.append(f"[Step {step_count}] {description}")
 
-                # Track examined papers
                 if fn_name == "get_paper_details":
                     papers_examined.add(fn_args.get("arxiv_id", ""))
                 elif fn_name == "find_related_papers":
                     papers_examined.add(fn_args.get("arxiv_id", ""))
 
-                # Handle special tools
                 if fn_name == "record_finding":
                     finding = {
                         "category": fn_args.get("category", "theme"),
@@ -512,10 +482,8 @@ def run_agent_traversal(
                 if fn_name == "finish_exploration":
                     finished = True
 
-                # Execute the tool
                 tool_result = _execute_tool(fn_name, fn_args)
 
-                # Add tool result to conversation
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call.id,
@@ -523,24 +491,20 @@ def run_agent_traversal(
                 })
 
         elif choice.finish_reason == "stop":
-            # Model stopped without tool calls — treat as finished
             finished = True
 
-    # ── 4. Generate final synthesis ──
     yield {"event": "step", "data": {
         "step": step_count + 1,
         "action": "Synthesizing",
-        "detail": f"Writing synthesis from {len(findings)} findings across {len(papers_examined)} papers…",
+        "detail": f"Writing synthesis from {len(findings)} findings across {len(papers_examined)} papers...",
     }}
 
-    # Build findings summary
     findings_text = ""
     for i, f in enumerate(findings):
         findings_text += f"\n{i+1}. [{f['category'].upper()}] {f['description']}"
         if f.get("papers"):
             findings_text += f"\n   Papers: {', '.join(f['papers'])}"
 
-    # Build papers examined summary
     all_paper_ids = list(papers_examined | {p["arxiv_id"] for p in seed_papers})
     papers_info = get_subgraph_for_synthesis(all_paper_ids)
     papers_text = ""

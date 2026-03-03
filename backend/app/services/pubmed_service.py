@@ -25,12 +25,6 @@ NCBI_API_KEY = os.getenv("NCBI_API_KEY", "")
 NCBI_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 NCBI_RATE_LIMIT = 0.35 if NCBI_API_KEY else 1.0  # seconds between requests
 
-# ---------------------------------------------------------------------------
-# Domain → PubMed MeSH term mapping
-# Only domains with meaningful biomedical/life-science overlap are mapped.
-# Others simply return no results from PubMed (which is fine — we have 3
-# other sources to cover them).
-# ---------------------------------------------------------------------------
 DOMAIN_TO_MESH = {
     "q-bio": ["Computational Biology", "Quantitative Biology"],
     "bio": ["Biology"],
@@ -93,7 +87,6 @@ def _fetch_details(pmids: List[str]) -> List[dict]:
 
     papers: List[dict] = []
 
-    # Process in batches of 50 (efetch recommended max)
     for batch_start in range(0, len(pmids), 50):
         batch = pmids[batch_start:batch_start + 50]
         params = _build_params()
@@ -140,11 +133,9 @@ def _parse_article(article_el) -> Optional[dict]:
         if article is None:
             return None
 
-        # Title
         title_el = article.find("ArticleTitle")
         title = (title_el.text or "").strip() if title_el is not None else ""
 
-        # Abstract
         abstract_el = article.find(".//Abstract")
         if abstract_el is not None:
             abstract_parts = []
@@ -162,7 +153,6 @@ def _parse_article(article_el) -> Optional[dict]:
         if not title or not abstract or len(abstract) < 50:
             return None
 
-        # Authors
         authors = []
         author_list = article.find("AuthorList")
         if author_list is not None:
@@ -177,7 +167,6 @@ def _parse_article(article_el) -> Optional[dict]:
                 if name_parts:
                     authors.append(" ".join(name_parts))
 
-        # Publication date
         pub_date_el = article.find(".//PubDate")
         published_date = date.today()
         if pub_date_el is not None:
@@ -187,7 +176,6 @@ def _parse_article(article_el) -> Optional[dict]:
             try:
                 year = int(year_el.text) if year_el is not None and year_el.text else date.today().year
                 month_str = month_el.text if month_el is not None and month_el.text else "1"
-                # PubMed months can be abbreviations like "Jan", "Feb"
                 try:
                     month = int(month_str)
                 except ValueError:
@@ -199,7 +187,6 @@ def _parse_article(article_el) -> Optional[dict]:
             except (ValueError, TypeError):
                 pass
 
-        # DOI
         doi = ""
         article_ids = article_el.findall(".//ArticleId")
         for aid in article_ids:
@@ -207,7 +194,6 @@ def _parse_article(article_el) -> Optional[dict]:
                 doi = aid.text
                 break
 
-        # Canonical ID and URL
         canonical_id = f"PMID:{pmid}"
         url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
 
@@ -244,7 +230,6 @@ def fetch_recent_papers(
     if not domains:
         return []
 
-    # Collect MeSH terms for the given domains
     mesh_terms: List[str] = []
     for d in domains:
         terms = DOMAIN_TO_MESH.get(d, [])
@@ -254,7 +239,6 @@ def fetch_recent_papers(
         print(f"[PubMed] No MeSH mappings for domains {domains}, skipping.")
         return []
 
-    # Deduplicate
     mesh_terms = list(set(mesh_terms))
 
     papers: List[dict] = []
@@ -262,9 +246,7 @@ def fetch_recent_papers(
     per_term_limit = max(20, max_results // len(mesh_terms))
 
     for term in mesh_terms:
-        # Build PubMed query: MeSH term, optionally refined by LLM-optimized queries
         if search_queries:
-            # Run each optimized query combined with this MeSH term
             for sq in search_queries:
                 if len(papers) >= max_results:
                     break

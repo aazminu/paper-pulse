@@ -4,11 +4,11 @@ Cohere Rerank v4.0-pro integration.
 Cohere's rerank-v4.0-pro is the state-of-the-art neural reranker with a massive
 32K token context per document (8x larger than v3.5's 4K). Given a query
 and a set of documents, it produces calibrated relevance scores using a
-cross-encoder architecture — far more accurate than cosine similarity alone.
+cross-encoder architecture - far more accurate than cosine similarity alone.
 
 This module is used in two places:
-  1. Feed pipeline — rerank top vector-similarity candidates for each user
-  2. Q&A pipeline — rerank retrieved papers before passing to the LLM
+  1. Feed pipeline - rerank top vector-similarity candidates for each user
+  2. Q&A pipeline - rerank retrieved papers before passing to the LLM
 
 Requires COHERE_API_KEY in your .env file.
 Pricing: https://cohere.com/pricing
@@ -54,11 +54,9 @@ def rerank_papers(
         return []
 
     if not _client:
-        print("  [Rerank] No Cohere API key — returning papers in original order.")
+        print("  [Rerank] No Cohere API key - returning papers in original order.")
         return papers[:top_n]
 
-    # Build documents for Cohere — combine title + abstract (+ full_text if available)
-    # rerank-v4.0-pro has 32K token context per doc, so no need to truncate
     documents = []
     for p in papers:
         title = p.get("title", "")

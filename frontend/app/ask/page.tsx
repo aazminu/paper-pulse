@@ -39,7 +39,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import RelatedPapers from "@/components/RelatedPapers";
 
-/* ── Types ─────────────────────────────────────────────────────────────── */
+/* Types */
 
 interface Source {
 	arxiv_id: string;
@@ -85,7 +85,7 @@ interface SearchResult extends Chat {
 	};
 }
 
-/* ── Markdown renderers ───────────────────────────────────────────────── */
+/* Markdown renderers */
 
 const markdownComponents: Components = {
 	p: ({ children }) => (
@@ -155,7 +155,7 @@ const markdownComponents: Components = {
 	),
 };
 
-/* ── File helpers ─────────────────────────────────────────────────────── */
+/* File helpers */
 
 const ACCEPTED_TYPES: Record<string, string> = {
 	"image/png": "image",
@@ -205,7 +205,7 @@ function classifyFile(file: File): string {
 	return ACCEPTED_TYPES[file.type] || "text";
 }
 
-/* ── Preview Modal ─────────────────────────────────────────────────────── */
+/* Preview Modal */
 
 function PreviewModal({
 	files,
@@ -336,7 +336,7 @@ function PreviewModal({
 	);
 }
 
-/* ── Relative time helper ────────────────────────────────────────────── */
+/* Relative time helper */
 
 function relativeTime(dateStr: string): string {
 	const now = Date.now();
@@ -352,7 +352,7 @@ function relativeTime(dateStr: string): string {
 	return new Date(dateStr).toLocaleDateString();
 }
 
-/* ── Chat list item component ────────────────────────────────────────── */
+/* Chat list item component */
 
 function ChatItem({
 	chat,
@@ -485,7 +485,7 @@ function ChatItem({
 	);
 }
 
-/* ── Input bar (shared between empty state & active chat) ────────────── */
+/* Input bar (shared between empty state & active chat) */
 
 function InputBar({
 	query,
@@ -662,14 +662,13 @@ function InputBar({
 	);
 }
 
-/* ── Main component ───────────────────────────────────────────────────── */
+/* Main component */
 
 export default function AskPage() {
 	const { user, isLoaded } = useUser();
 	const searchParams = useSearchParams();
 	const router = useRouter();
 
-	// Chat list
 	const [chats, setChats] = useState<Chat[]>([]);
 	const [activeChatId, setActiveChatId] = useState<string | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(() => {
@@ -681,13 +680,11 @@ export default function AskPage() {
 	const [editingChatId, setEditingChatId] = useState<string | null>(null);
 	const [editTitle, setEditTitle] = useState("");
 
-	// Search
 	const [searchQuery, setSearchQuery] = useState("");
 	const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
 	const [isSearching, setIsSearching] = useState(false);
 	const searchTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-	// Messages
 	const [query, setQuery] = useState(() => {
 		if (typeof window === "undefined") return "";
 		return localStorage.getItem("pp-draft-query") || "";
@@ -696,21 +693,17 @@ export default function AskPage() {
 	const [isLoading, setIsLoading] = useState(false);
 	const [streamingStage, setStreamingStage] = useState<string | null>(null);
 
-	// Attachments
 	const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
 	const [isDragging, setIsDragging] = useState(false);
 
-	// Voice recording
 	const [isRecording, setIsRecording] = useState(false);
 	const [recordingTime, setRecordingTime] = useState(0);
 
-	// Preview modal
 	const [previewModal, setPreviewModal] = useState<{
 		files: PreviewFile[];
 		index: number;
 	} | null>(null);
 
-	// Refs
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 	const audioChunksRef = useRef<Blob[]>([]);
@@ -723,7 +716,7 @@ export default function AskPage() {
 
 	const API = process.env.NEXT_PUBLIC_API_URL;
 
-	/* ── Debounced search ─────────────────────────────────────────────── */
+	/* Debounced search */
 	useEffect(() => {
 		if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
 		if (!searchQuery.trim() || searchQuery.trim().length < 2) {
@@ -756,17 +749,17 @@ export default function AskPage() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [searchQuery, user]);
 
-	/* ── Persist sidebar state ────────────────────────────────────────── */
+	/* Persist sidebar state */
 	useEffect(() => {
 		localStorage.setItem("pp-sidebar-open", String(sidebarOpen));
 	}, [sidebarOpen]);
 
-	/* ── Persist draft query ─────────────────────────────────────────── */
+	/* Persist draft query */
 	useEffect(() => {
 		localStorage.setItem("pp-draft-query", query);
 	}, [query]);
 
-	/* ── Sync active chat ↔ URL ?chat= ───────────────────────────────── */
+	/* Sync active chat with URL ?chat= */
 	useEffect(() => {
 		if (activeChatId) {
 			const url = new URL(window.location.href);
@@ -784,14 +777,14 @@ export default function AskPage() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [activeChatId]);
 
-	/* ── Load chats on mount ─────────────────────────────────────────── */
+	/* Load chats on mount */
 	useEffect(() => {
 		if (!user) return;
 		fetchChats();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [user]);
 
-	/* ── Handle ?paper= param — auto-explore a paper ─────────────────── */
+	/* Handle ?paper= param - auto-explore a paper */
 	useEffect(() => {
 		if (!user || paperHandledRef.current) return;
 		const paperId = searchParams.get("paper");
@@ -800,14 +793,12 @@ export default function AskPage() {
 
 		(async () => {
 			try {
-				// 1. Fetch paper info
 				const paperRes = await fetch(
 					`${API}/papers/${encodeURIComponent(paperId)}`,
 				);
 				if (!paperRes.ok) return;
 				const paper = await paperRes.json();
 
-				// 2. Create a new chat
 				const chatRes = await fetch(`${API}/chats/`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -818,19 +809,15 @@ export default function AskPage() {
 				setChats((prev) => [chat, ...prev]);
 				setActiveChatId(chat.id);
 
-				// 3. Build an initial question about the paper
 				const initQuestion = `Tell me about this paper: "${paper.title}". Give me a comprehensive overview including the key contributions, methodology, main findings, and why it matters.`;
 
-				// 4. Show user message in UI
 				const userMsg: Message = { role: "user", content: initQuestion };
 				setMessages([userMsg]);
 				setIsLoading(true);
 				streamingRef.current = true;
 
-				// 5. Save user message to DB
 				const saveUserPromise = saveMessage(chat.id, "user", initQuestion);
 
-				// 6. Call the streaming ask endpoint
 				const askRes = await fetch(`${API}/ask/stream`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -894,10 +881,9 @@ export default function AskPage() {
 					await saveMessage(chat.id, "ai", exploreAnswer, exploreSources);
 				}
 
-				// 7. Update chat title
 				const titleText =
 					paper.title.length > 40
-						? paper.title.slice(0, 40) + "…"
+						? paper.title.slice(0, 40) + "..."
 						: paper.title;
 				setChats((prev) =>
 					prev.map((c) => (c.id === chat.id ? { ...c, title: titleText } : c)),
@@ -908,7 +894,6 @@ export default function AskPage() {
 					body: JSON.stringify({ title: titleText }),
 				}).catch(() => {});
 
-				// 8. Clear paper param from URL
 				const url = new URL(window.location.href);
 				url.searchParams.delete("paper");
 				url.searchParams.set("chat", chat.id);
@@ -930,7 +915,6 @@ export default function AskPage() {
 			if (!res.ok) return;
 			const data: Chat[] = await res.json();
 			setChats(data);
-			// Restore active chat from URL ?chat= param
 			const chatParam = searchParams.get("chat");
 			if (chatParam && data.some((c) => c.id === chatParam)) {
 				setActiveChatId(chatParam);
@@ -940,7 +924,7 @@ export default function AskPage() {
 		}
 	};
 
-	/* ── Load messages when active chat changes ──────────────────────── */
+	/* Load messages when active chat changes */
 	useEffect(() => {
 		if (!activeChatId) {
 			setMessages([]);
@@ -977,7 +961,7 @@ export default function AskPage() {
 		}
 	};
 
-	/* ── Create new chat ─────────────────────────────────────────────── */
+	/* Create new chat */
 	const createNewChat = async () => {
 		if (!user) return;
 		try {
@@ -996,7 +980,7 @@ export default function AskPage() {
 		}
 	};
 
-	/* ── Save a message to DB ────────────────────────────────────────── */
+	/* Save a message to DB */
 	const saveMessage = async (
 		chatId: string,
 		role: string,
@@ -1026,7 +1010,7 @@ export default function AskPage() {
 		}
 	};
 
-	/* ── Delete chat ─────────────────────────────────────────────────── */
+	/* Delete chat */
 	const deleteChat = async (chatId: string) => {
 		try {
 			await fetch(`${API}/chats/${chatId}`, { method: "DELETE" });
@@ -1040,7 +1024,7 @@ export default function AskPage() {
 		}
 	};
 
-	/* ── Toggle star ─────────────────────────────────────────────────── */
+	/* Toggle star */
 	const toggleStar = async (chatId: string) => {
 		const chat = chats.find((c) => c.id === chatId);
 		if (!chat) return;
@@ -1062,7 +1046,7 @@ export default function AskPage() {
 		}
 	};
 
-	/* ── Rename chat ─────────────────────────────────────────────────── */
+	/* Rename chat */
 	const renameChat = async (chatId: string, newTitle: string) => {
 		if (!newTitle.trim()) return;
 		setChats((prev) =>
@@ -1080,7 +1064,7 @@ export default function AskPage() {
 		}
 	};
 
-	/* ── Close context menu on outside click ─────────────────────────── */
+	/* Close context menu on outside click */
 	useEffect(() => {
 		const handleClick = (e: MouseEvent) => {
 			if (
@@ -1096,7 +1080,7 @@ export default function AskPage() {
 		}
 	}, [chatMenuOpen]);
 
-	/* ── Lock body scroll on this page ───────────────────────────────── */
+	/* Lock body scroll on this page */
 	useEffect(() => {
 		const html = document.documentElement;
 		const body = document.body;
@@ -1108,20 +1092,18 @@ export default function AskPage() {
 		};
 	}, []);
 
-	/* ── Auto-scroll ─────────────────────────────────────────────────── */
+	/* Auto-scroll */
 	useEffect(() => {
 		const container = messagesContainerRef.current;
 		if (!container) return;
 		if (streamingRef.current) {
-			// Instant jump during streaming — no smooth animation to avoid jitter
 			container.scrollTop = container.scrollHeight;
 		} else {
-			// Smooth scroll for non-streaming updates (loading history, etc.)
 			container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
 		}
 	}, [messages, isLoading, streamingStage]);
 
-	/* ── Auto-resize textarea ────────────────────────────────────────── */
+	/* Auto-resize textarea */
 	useEffect(() => {
 		if (textareaRef.current) {
 			textareaRef.current.style.height = "auto";
@@ -1130,7 +1112,7 @@ export default function AskPage() {
 		}
 	}, [query]);
 
-	/* ── File handling ───────────────────────────────────────────────── */
+	/* File handling */
 
 	const addFiles = useCallback((fileList: FileList | File[]) => {
 		const newFiles: AttachedFile[] = [];
@@ -1178,7 +1160,7 @@ export default function AskPage() {
 		setPreviewModal({ files, index });
 	};
 
-	/* ── Voice recording ─────────────────────────────────────────────── */
+	/* Voice recording */
 
 	const startRecording = async () => {
 		try {
@@ -1220,7 +1202,7 @@ export default function AskPage() {
 		}
 	};
 
-	/* ── Drag and drop ───────────────────────────────────────────────── */
+	/* Drag and drop */
 
 	const handleDragOver = (e: React.DragEvent) => {
 		e.preventDefault();
@@ -1236,7 +1218,7 @@ export default function AskPage() {
 		if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
 	};
 
-	/* ── SSE stream consumer helper ──────────────────────────────────── */
+	/* SSE stream consumer helper */
 
 	const consumeSSE = async (
 		response: Response,
@@ -1256,7 +1238,6 @@ export default function AskPage() {
 			if (done) break;
 			buf += decoder.decode(value, { stream: true });
 
-			// SSE events are separated by double newlines
 			const parts = buf.split("\n\n");
 			buf = parts.pop() || "";              // keep last incomplete chunk
 
@@ -1284,7 +1265,7 @@ export default function AskPage() {
 		}
 	};
 
-	/* ── Ask handler ─────────────────────────────────────────────────── */
+	/* Ask handler */
 
 	const handleAsk = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -1297,7 +1278,6 @@ export default function AskPage() {
 		setAttachedFiles([]);
 		if (textareaRef.current) textareaRef.current.style.height = "auto";
 
-		// Auto-create a chat if none is active
 		let chatId = activeChatId;
 		if (!chatId) {
 			try {
@@ -1317,7 +1297,6 @@ export default function AskPage() {
 			}
 		}
 
-		// Build conversation history
 		const history = messages.slice(-10).map((m) => ({
 			role: m.role === "ai" ? "assistant" : "user",
 			content: m.content.substring(0, 3000),
@@ -1341,7 +1320,6 @@ export default function AskPage() {
 		setStreamingStage(null);
 		streamingRef.current = true;
 
-		// Save user message to DB
 		const saveUserPromise = saveMessage(
 			chatId,
 			"user",
@@ -1392,11 +1370,9 @@ export default function AskPage() {
 
 			await consumeSSE(
 				response,
-				// onStage
 				(_stage, message) => {
 					setStreamingStage(message);
 				},
-				// onSources
 				(sources) => {
 					collectedSources = sources;
 					if (aiMessageAdded) {
@@ -1410,7 +1386,6 @@ export default function AskPage() {
 						});
 					}
 				},
-				// onToken
 				(token) => {
 					ensureAiMessage();
 					collectedAnswer += token;
@@ -1424,11 +1399,9 @@ export default function AskPage() {
 						return updated;
 					});
 				},
-				// onDone
 				() => {
 					setStreamingStage(null);
 				},
-				// onError
 				(msg) => {
 					ensureAiMessage();
 					setMessages((prev) => {
@@ -1445,15 +1418,12 @@ export default function AskPage() {
 				},
 			);
 
-			// Wait for user message save (may have generated title)
 			await saveUserPromise;
 
-			// Save AI response to DB
 			if (collectedAnswer) {
 				await saveMessage(chatId, "ai", collectedAnswer, collectedSources);
 			}
 
-			// Bump chat to top & generate title if still "New Chat"
 			setChats((prev) => {
 				const updated = prev.map((c) =>
 					c.id === chatId ? { ...c, updated_at: new Date().toISOString() } : c,
@@ -1465,12 +1435,11 @@ export default function AskPage() {
 					);
 				});
 
-				// If title is still "New Chat", kick off a background rename
 				const current = updated.find((c) => c.id === chatId);
 				if (current && current.title === "New Chat" && userMessage) {
 					const fallback =
 						userMessage.length > 40
-							? userMessage.slice(0, 40) + "…"
+							? userMessage.slice(0, 40) + "..."
 							: userMessage;
 					fetch(`${API}/chats/${chatId}`, {
 						method: "PATCH",
@@ -1503,7 +1472,7 @@ export default function AskPage() {
 
 	if (!isLoaded) return null;
 
-	/* ── Grouped chats for sidebar ───────────────────────────────────── */
+	/* Grouped chats for sidebar */
 	const starredChats = chats.filter((c) => c.starred);
 	const recentChats = chats.filter((c) => !c.starred);
 	const isEmptyState = !activeChatId && messages.length === 0;
@@ -1573,7 +1542,7 @@ export default function AskPage() {
 
 			{/* Body: sidebar + chat */}
 			<div className="flex grow min-h-0 overflow-hidden">
-				{/* ── Sidebar ──────────────────────────────────────────────── */}
+				{/* Sidebar */}
 				<aside
 					className={`shrink-0 border-r bg-white dark:bg-zinc-950 flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${
 						sidebarOpen ? "w-72 opacity-100" : "w-0 opacity-0 border-r-0"
@@ -1747,7 +1716,7 @@ export default function AskPage() {
 					</div>
 				</aside>
 
-				{/* ── Chat area ────────────────────────────────────────────── */}
+				{/* Chat area */}
 				<main className="flex-1 flex flex-col min-h-0 overflow-hidden">
 					{isEmptyState ? (
 						<div className="flex-1 flex flex-col items-center justify-center p-6">
@@ -1786,7 +1755,6 @@ export default function AskPage() {
 							<div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
 								<div className="max-w-4xl mx-auto space-y-6 pb-6">
 									{messages.map((msg, index) => {
-										// Skip rendering empty AI messages (placeholder before first token)
 										if (msg.role === "ai" && !msg.content && (!msg.sources || msg.sources.length === 0)) return null;
 										return (
 										<div

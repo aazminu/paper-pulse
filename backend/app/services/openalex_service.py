@@ -1,12 +1,12 @@
 """
 OpenAlex API integration.
 
-OpenAlex is a fully open catalog of the global research system — 250M+
+OpenAlex is a fully open catalog of the global research system - 250M+
 scholarly works, 100k+ concepts, all freely available with no API key
 required. It is the successor to Microsoft Academic Graph.
 
 Docs: https://docs.openalex.org/
-Rate limit: 100k requests/day (polite pool — just set a mailto in the header).
+Rate limit: 100k requests/day (polite pool - just set a mailto in the header).
 """
 
 import os
@@ -21,15 +21,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 OPENALEX_BASE_URL = "https://api.openalex.org"
-# OpenAlex gives you 10x the rate limit if you set a contact email
 OPENALEX_MAILTO = os.getenv("OPENALEX_MAILTO", "")
-OPENALEX_RATE_LIMIT = 0.2  # seconds between requests (generous limit)
+OPENALEX_RATE_LIMIT = 0.2 # seconds between requests 
 
-# ---------------------------------------------------------------------------
-# Domain → OpenAlex concept ID mapping
-# These are the top-level OpenAlex concept IDs (level 0 & 1).
-# Full list: https://docs.openalex.org/api-entities/concepts
-# ---------------------------------------------------------------------------
 DOMAIN_TO_CONCEPT = {
     "cs": "C41008148",       # Computer Science
     "math": "C33923547",     # Mathematics
@@ -54,9 +48,8 @@ DOMAIN_TO_CONCEPT = {
     "art": "C142362112",    # Art
     "bus": "C144133560",    # Business
     "agri": "C118552586",   # Agricultural and Food Sciences
-    "educ": "C185592680",   # Education (approximate)
-    "law": "C138885662",    # Law (approximate)
-    # Physics sub-fields (mapped to Physics concept)
+  "educ": "C185592680",  # Education 
+  "law": "C138885662",  # Law 
     "astro-ph": "C121332964",
     "cond-mat": "C121332964",
     "gr-qc": "C121332964",
@@ -87,11 +80,8 @@ def _parse_work(raw: dict) -> Optional[dict]:
         work_id = raw.get("id", "")
         title = (raw.get("title") or "").strip()
 
-        # OpenAlex stores abstract as an inverted index for space efficiency
-        # We need to reconstruct it
         abstract_inverted = raw.get("abstract_inverted_index")
         if abstract_inverted:
-            # Reconstruct abstract from inverted index
             position_word = []
             for word, positions in abstract_inverted.items():
                 for pos in positions:
@@ -104,7 +94,6 @@ def _parse_work(raw: dict) -> Optional[dict]:
         if not title or not abstract or len(abstract) < 50:
             return None
 
-        # Authors
         authorships = raw.get("authorships", [])
         authors = []
         for a in authorships:
@@ -113,7 +102,6 @@ def _parse_work(raw: dict) -> Optional[dict]:
             if name:
                 authors.append(name)
 
-        # Publication date
         pub_date_str = raw.get("publication_date", "")
         if pub_date_str:
             try:
@@ -123,16 +111,13 @@ def _parse_work(raw: dict) -> Optional[dict]:
         else:
             published_date = date.today()
 
-        # IDs — prefer DOI or ArXiv ID
         ids = raw.get("ids", {})
         doi = ids.get("doi", "") or raw.get("doi", "")
-        # Check for ArXiv ID in locations
         arxiv_id = ""
         locations = raw.get("locations", [])
         for loc in locations:
             source_url = loc.get("landing_page_url", "") or ""
             if "arxiv.org" in source_url:
-                # Extract ArXiv ID from URL
                 parts = source_url.split("/abs/")
                 if len(parts) > 1:
                     arxiv_id = parts[1].split("v")[0]
@@ -145,14 +130,13 @@ def _parse_work(raw: dict) -> Optional[dict]:
             canonical_id = f"DOI:{doi.replace('https://doi.org/', '')}"
             url = doi if doi.startswith("http") else f"https://doi.org/{doi}"
         else:
-            # Use OpenAlex ID
             canonical_id = f"OA:{work_id.split('/')[-1]}"
             url = work_id
 
         return {
             "arxiv_id": canonical_id,
             "title": title,
-            "authors": authors[:10],  # Cap authors for sanity
+            "authors": authors[:10],
             "published_date": published_date,
             "abstract": abstract,
             "url": url,
@@ -181,7 +165,6 @@ def fetch_recent_papers(
     if not domains:
         return []
 
-    # Collect unique concept IDs
     concept_ids = set()
     for d in domains:
         cid = DOMAIN_TO_CONCEPT.get(d)
@@ -196,7 +179,6 @@ def fetch_recent_papers(
 
     from_date = (date.today() - timedelta(days=days_back)).isoformat()
 
-    # When we have optimized queries, run each query per concept
     if search_queries:
         per_query = max(10, max_results // len(search_queries))
         for query_text in search_queries:
@@ -222,7 +204,7 @@ def fetch_recent_papers(
                     )
 
                     if resp.status_code == 429:
-                        print(f"  [OpenAlex] Rate limited, backing off…")
+                        print(f"  [OpenAlex] Rate limited, backing off...")
                         time.sleep(5)
                         continue
 
@@ -249,14 +231,13 @@ def fetch_recent_papers(
         print(f"[OpenAlex] Fetched {len(papers)} papers via {len(search_queries)} optimized queries")
         return papers
 
-    # Fallback: broad concept-based fetch sorted by date
     for concept_id in concept_ids:
         page = 1
         per_concept_limit = max(50, max_results // len(concept_ids))
         fetched = 0
 
         while fetched < per_concept_limit:
-            per_page = min(50, per_concept_limit - fetched)  # OpenAlex max = 200/page but 50 is fast
+            per_page = min(50, per_concept_limit - fetched)
 
             params = _build_params()
             params.update({
@@ -274,7 +255,7 @@ def fetch_recent_papers(
                 )
 
                 if resp.status_code == 429:
-                    print(f"  [OpenAlex] Rate limited, backing off…")
+                    print(f"  [OpenAlex] Rate limited, backing off...")
                     time.sleep(5)
                     continue
 

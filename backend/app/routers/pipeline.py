@@ -6,7 +6,6 @@ router = APIRouter(
     tags=["Admin"]
 )
 
-# Store latest pipeline result for polling
 _pipeline_status = {"running": False, "last_result": None}
 
 def _run_pipeline_bg():

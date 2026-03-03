@@ -2,8 +2,8 @@
 Entity Extraction Service for PaperPulse Knowledge Graph
 
 Uses o4-mini to extract structured entities from paper abstracts:
-  - Concepts (methods, techniques, datasets, tasks, theories)
-  - Institution affiliations (parsed from author metadata when available)
+ - Concepts (methods, techniques, datasets, tasks, theories)
+ - Institution affiliations (parsed from author metadata when available)
 
 Output feeds into Neo4j graph population.
 """
@@ -30,12 +30,12 @@ Return a JSON object with these fields:
 }
 
 Rules:
-- Concepts: Extract 3–10 key technical concepts. Each must be specific and meaningful (not generic like "machine learning" unless the paper is specifically about ML foundations).
-  - method: specific algorithms or approaches (e.g., "transformer attention", "diffusion sampling")
-  - dataset: named datasets (e.g., "ImageNet", "MMLU")
-  - theory: theoretical frameworks or mathematical concepts
-  - task: specific problems being solved (e.g., "image segmentation", "named entity recognition")
-  - technique: implementation techniques (e.g., "knowledge distillation", "gradient checkpointing")
+- Concepts: Extract 3-10 key technical concepts. Each must be specific and meaningful (not generic like "machine learning" unless the paper is specifically about ML foundations).
+ - method: specific algorithms or approaches (e.g., "transformer attention", "diffusion sampling")
+ - dataset: named datasets (e.g., "ImageNet", "MMLU")
+ - theory: theoretical frameworks or mathematical concepts
+ - task: specific problems being solved (e.g., "image segmentation", "named entity recognition")
+ - technique: implementation techniques (e.g., "knowledge distillation", "gradient checkpointing")
 - Affiliations: Only extract if clearly stated or inferable from emails in the abstract. If not present, return empty array.
 - Normalize names: use the most common/canonical form.
 - Return ONLY valid JSON, no markdown formatting."""
@@ -67,7 +67,6 @@ def extract_entities(title: str, abstract: str, authors: list[str] | None = None
             return {"concepts": [], "affiliations": []}
         raw = raw.strip()
 
-        # Strip markdown code fences if present
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
             if raw.endswith("```"):
@@ -76,11 +75,9 @@ def extract_entities(title: str, abstract: str, authors: list[str] | None = None
 
         result = json.loads(raw)
 
-        # Validate structure
         concepts = result.get("concepts", [])
         affiliations = result.get("affiliations", [])
 
-        # Ensure each concept has required fields
         valid_categories = {"method", "dataset", "theory", "task", "technique"}
         validated_concepts = []
         for c in concepts:
@@ -133,7 +130,7 @@ def batch_extract_entities(papers: list[dict]) -> dict[str, dict]:
             results[pid] = {"concepts": [], "affiliations": []}
             continue
 
-        print(f"  [EntityExtract] Processing {pid}: {title[:60]}…")
+        print(f"  [EntityExtract] Processing {pid}: {title[:60]}...")
         entities = extract_entities(title, abstract, authors)
         results[pid] = entities
 
