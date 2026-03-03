@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sparkles, ExternalLink, GitBranch } from "lucide-react";
+import { authFetch } from "@/lib/api";
 
 interface RelatedPaper {
 	arxiv_id: string;
@@ -33,7 +34,7 @@ export default function RelatedPapers({
 	useEffect(() => {
 		const fetchRelated = async () => {
 			try {
-				const res = await fetch(
+				const res = await authFetch(
 					`${process.env.NEXT_PUBLIC_API_URL}/graph/paper/${encodeURIComponent(arxivId)}/related?limit=5`,
 				);
 				if (res.ok) {

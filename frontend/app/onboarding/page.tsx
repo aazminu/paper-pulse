@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { useRouter } from "next/navigation";
+import { authFetch } from "@/lib/api";
 import {
 	Card,
 	CardContent,
@@ -101,7 +102,7 @@ export default function OnboardingPage() {
 		setIsSubmitting(true);
 
 		try {
-			const response = await fetch(
+			const response = await authFetch(
 				`${process.env.NEXT_PUBLIC_API_URL}/users/`,
 				{
 					method: "POST",
@@ -116,7 +117,7 @@ export default function OnboardingPage() {
 			);
 
 			if (response.ok) {
-				fetch(
+				authFetch(
 					`${process.env.NEXT_PUBLIC_API_URL}/pipeline/bootstrap/${user.id}`,
 					{ method: "POST" },
 				).catch(() => {});
@@ -134,6 +135,10 @@ export default function OnboardingPage() {
 	};
 
 	if (!isLoaded) return null;
+	if (!user) {
+		router.push("/sign-in");
+		return null;
+	}
 
 	return (
 		<div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-black p-4">

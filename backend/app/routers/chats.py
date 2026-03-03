@@ -4,14 +4,24 @@ Chat CRUD router - persistent conversations like ChatGPT / Claude.
 import json
 import logging
 from uuid import UUID
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from app.database import supabase
 from app.services.openai_service import generate_chat_title
+from app.auth import get_current_user
 
 logger = logging.getLogger("chats")
 
 router = APIRouter(prefix="/chats", tags=["Chats"])
+
+
+def _verify_chat_owner(chat_id: str, user_id: str):
+    """Raise 403 if the chat doesn't belong to the user."""
+    resp = supabase.table("chats").select("user_id").eq("id", chat_id).execute()
+    if not resp.data:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    if resp.data[0]["user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
 
 class CreateChatRequest(BaseModel):
@@ -29,8 +39,10 @@ class UpdateChatRequest(BaseModel):
 
 
 @router.get("/")
-def list_chats(user_id: str):
+def list_chats(user_id: str, current_user: dict = Depends(get_current_user)):
     """Return all chats for a user, starred first, then by most recent."""
+    if current_user["id"] != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     try:
         resp = (
             supabase.table("chats")
@@ -46,9 +58,11 @@ def list_chats(user_id: str):
 
 
 @router.get("/search")
-def search_chats(user_id: str, q: str):
+def search_chats(user_id: str, q: str, current_user: dict = Depends(get_current_user)):
     """Search across chat titles and message content for a user.
     Returns matching chats with a snippet of the first matching message."""
+    if current_user["id"] != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     if not q or len(q.strip()) < 2:
         raise HTTPException(status_code=400, detail="Query must be at least 2 characters")
     query_term = q.strip().lower()
@@ -107,8 +121,10 @@ def search_chats(user_id: str, q: str):
 
 
 @router.post("/")
-def create_chat(req: CreateChatRequest):
+def create_chat(req: CreateChatRequest, current_user: dict = Depends(get_current_user)):
     """Create a new empty chat and return it."""
+    if current_user["id"] != req.user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     try:
         resp = (
             supabase.table("chats")
@@ -121,8 +137,9 @@ def create_chat(req: CreateChatRequest):
 
 
 @router.get("/{chat_id}")
-def get_chat(chat_id: UUID):
+def get_chat(chat_id: UUID, current_user: dict = Depends(get_current_user)):
     """Return a chat and all its messages ordered chronologically."""
+    _verify_chat_owner(str(chat_id), current_user["id"])
     try:
         chat_resp = (
             supabase.table("chats")
@@ -151,8 +168,9 @@ def get_chat(chat_id: UUID):
 
 
 @router.patch("/{chat_id}")
-def update_chat(chat_id: UUID, req: UpdateChatRequest):
+def update_chat(chat_id: UUID, req: UpdateChatRequest, current_user: dict = Depends(get_current_user)):
     """Update chat title and/or starred status."""
+    _verify_chat_owner(str(chat_id), current_user["id"])
     try:
         updates = {}
         if req.title is not None:
@@ -178,8 +196,9 @@ def update_chat(chat_id: UUID, req: UpdateChatRequest):
 
 
 @router.delete("/{chat_id}")
-def delete_chat(chat_id: UUID):
+def delete_chat(chat_id: UUID, current_user: dict = Depends(get_current_user)):
     """Delete a chat and cascade-delete all its messages."""
+    _verify_chat_owner(str(chat_id), current_user["id"])
     try:
         resp = (
             supabase.table("chats")
@@ -193,8 +212,9 @@ def delete_chat(chat_id: UUID):
 
 
 @router.post("/{chat_id}/messages")
-def add_message(chat_id: UUID, req: SaveMessageRequest):
+def add_message(chat_id: UUID, req: SaveMessageRequest, current_user: dict = Depends(get_current_user)):
     """Save a message to an existing chat. Auto-generates title on the first user message."""
+    _verify_chat_owner(str(chat_id), current_user["id"])
     try:
         msg_data = {
             "chat_id": str(chat_id),

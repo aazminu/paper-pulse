@@ -5,6 +5,7 @@ import { useAuth } from "@/components/auth-provider";
 import UserMenu from "@/components/user-menu";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
+import { authFetch } from "@/lib/api";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import {
@@ -737,7 +738,7 @@ function AskPageContent() {
 		searchTimerRef.current = setTimeout(async () => {
 			if (!user) return;
 			try {
-				const res = await fetch(
+				const res = await authFetch(
 					`${API}/chats/search?user_id=${user.id}&q=${encodeURIComponent(searchQuery.trim())}`,
 				);
 				if (!res.ok) {
@@ -802,13 +803,13 @@ function AskPageContent() {
 
 		(async () => {
 			try {
-				const paperRes = await fetch(
+				const paperRes = await authFetch(
 					`${API}/papers/${encodeURIComponent(paperId)}`,
 				);
 				if (!paperRes.ok) return;
 				const paper = await paperRes.json();
 
-				const chatRes = await fetch(`${API}/chats/`, {
+				const chatRes = await authFetch(`${API}/chats/`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({ user_id: user.id }),
@@ -827,7 +828,7 @@ function AskPageContent() {
 
 				const saveUserPromise = saveMessage(chat.id, "user", initQuestion);
 
-				const askRes = await fetch(`${API}/ask/stream`, {
+				const askRes = await authFetch(`${API}/ask/stream`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({
@@ -914,7 +915,7 @@ function AskPageContent() {
 				setChats((prev) =>
 					prev.map((c) => (c.id === chat.id ? { ...c, title: titleText } : c)),
 				);
-				fetch(`${API}/chats/${chat.id}`, {
+				authFetch(`${API}/chats/${chat.id}`, {
 					method: "PATCH",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({ title: titleText }),
@@ -937,7 +938,7 @@ function AskPageContent() {
 	const fetchChats = async () => {
 		if (!user) return;
 		try {
-			const res = await fetch(`${API}/chats/?user_id=${user.id}`);
+			const res = await authFetch(`${API}/chats/?user_id=${user.id}`);
 			if (!res.ok) return;
 			const data: Chat[] = await res.json();
 			setChats(data);
@@ -963,7 +964,7 @@ function AskPageContent() {
 
 	const loadChatMessages = async (chatId: string) => {
 		try {
-			const res = await fetch(`${API}/chats/${chatId}`);
+			const res = await authFetch(`${API}/chats/${chatId}`);
 			if (!res.ok) return;
 			const data = await res.json();
 			const dbMessages: Message[] = (data.messages || []).map(
@@ -991,7 +992,7 @@ function AskPageContent() {
 	const createNewChat = async () => {
 		if (!user) return;
 		try {
-			const res = await fetch(`${API}/chats/`, {
+			const res = await authFetch(`${API}/chats/`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ user_id: user.id }),
@@ -1015,7 +1016,7 @@ function AskPageContent() {
 		attachments: PreviewFile[] = [],
 	) => {
 		try {
-			const res = await fetch(`${API}/chats/${chatId}/messages`, {
+			const res = await authFetch(`${API}/chats/${chatId}/messages`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ role, content, sources, attachments }),
@@ -1039,7 +1040,7 @@ function AskPageContent() {
 	/* Delete chat */
 	const deleteChat = async (chatId: string) => {
 		try {
-			await fetch(`${API}/chats/${chatId}`, { method: "DELETE" });
+			await authFetch(`${API}/chats/${chatId}`, { method: "DELETE" });
 			setChats((prev) => prev.filter((c) => c.id !== chatId));
 			if (activeChatId === chatId) {
 				setActiveChatId(null);
@@ -1059,7 +1060,7 @@ function AskPageContent() {
 			prev.map((c) => (c.id === chatId ? { ...c, starred: newStarred } : c)),
 		);
 		try {
-			await fetch(`${API}/chats/${chatId}`, {
+			await authFetch(`${API}/chats/${chatId}`, {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ starred: newStarred }),
@@ -1080,7 +1081,7 @@ function AskPageContent() {
 		);
 		setEditingChatId(null);
 		try {
-			await fetch(`${API}/chats/${chatId}`, {
+			await authFetch(`${API}/chats/${chatId}`, {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ title: newTitle.trim() }),
@@ -1322,7 +1323,7 @@ function AskPageContent() {
 		let chatId = activeChatId;
 		if (!chatId) {
 			try {
-				const res = await fetch(`${API}/chats/`, {
+				const res = await authFetch(`${API}/chats/`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({ user_id: user.id }),
@@ -1383,12 +1384,12 @@ function AskPageContent() {
 				for (const af of currentFiles) {
 					formData.append("files", af.file);
 				}
-				response = await fetch(`${API}/ask/stream/multimodal`, {
+				response = await authFetch(`${API}/ask/stream/multimodal`, {
 					method: "POST",
 					body: formData,
 				});
 			} else {
-				response = await fetch(`${API}/ask/stream`, {
+				response = await authFetch(`${API}/ask/stream`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({
@@ -1489,7 +1490,7 @@ function AskPageContent() {
 						userMessage.length > 40
 							? userMessage.slice(0, 40) + "..."
 							: userMessage;
-					fetch(`${API}/chats/${chatId}`, {
+					authFetch(`${API}/chats/${chatId}`, {
 						method: "PATCH",
 						headers: { "Content-Type": "application/json" },
 						body: JSON.stringify({ title: fallback }),
@@ -1519,6 +1520,10 @@ function AskPageContent() {
 	};
 
 	if (!isLoaded) return null;
+	if (!user) {
+		router.push("/sign-in");
+		return null;
+	}
 
 	/* Grouped chats for sidebar */
 	const starredChats = chats.filter((c) => c.starred);

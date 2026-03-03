@@ -31,7 +31,14 @@ export async function GET(request: Request) {
 				try {
 					const apiUrl =
 						process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-					const res = await fetch(`${apiUrl}/users/${user.id}`);
+					const {
+						data: { session },
+					} = await supabase.auth.getSession();
+					const res = await fetch(`${apiUrl}/users/${user.id}`, {
+						headers: session?.access_token
+							? { Authorization: `Bearer ${session.access_token}` }
+							: {},
+					});
 					if (res.ok) {
 						return NextResponse.redirect(`${baseUrl}/feed`);
 					}

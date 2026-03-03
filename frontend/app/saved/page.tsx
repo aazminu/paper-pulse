@@ -5,6 +5,7 @@ import { useAuth } from "@/components/auth-provider";
 import UserMenu from "@/components/user-menu";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { authFetch } from "@/lib/api";
 import {
 	Card,
 	CardContent,
@@ -82,7 +83,7 @@ export default function SavedPage() {
 		const fetchSaved = async () => {
 			if (!user) return;
 			try {
-				const res = await fetch(
+				const res = await authFetch(
 					`${process.env.NEXT_PUBLIC_API_URL}/feed/${user.id}/saved`,
 				);
 				if (res.ok) {
@@ -104,7 +105,7 @@ export default function SavedPage() {
 	const unsave = async (feedItemId: string) => {
 		setSaved(saved.filter((item) => item.id !== feedItemId));
 		try {
-			await fetch(`${process.env.NEXT_PUBLIC_API_URL}/feed/${feedItemId}`, {
+			await authFetch(`${process.env.NEXT_PUBLIC_API_URL}/feed/${feedItemId}`, {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ is_saved: false }),
@@ -127,6 +128,10 @@ export default function SavedPage() {
 	);
 
 	if (!isLoaded) return null;
+	if (!user) {
+		router.push("/sign-in");
+		return null;
+	}
 
 	return (
 		<div className="min-h-screen bg-zinc-50 dark:bg-black">

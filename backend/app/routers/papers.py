@@ -1,12 +1,14 @@
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from app.database import supabase
+from app.auth import get_current_user
 
 logger = logging.getLogger("papers")
 
 router = APIRouter(
     prefix="/papers",
-    tags=["Papers"]
+    tags=["Papers"],
+    dependencies=[Depends(get_current_user)]
 )
 
 

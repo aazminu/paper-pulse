@@ -1,7 +1,8 @@
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from app.models import FeedItemUpdate
 from app.database import supabase
+from app.auth import get_current_user
 
 logger = logging.getLogger("feed")
 
@@ -11,7 +12,9 @@ router = APIRouter(
 )
 
 @router.get("/{user_id}", summary="Get a user's daily paper feed")
-def get_user_feed(user_id: str):
+def get_user_feed(user_id: str, current_user: dict = Depends(get_current_user)):
+    if current_user["id"] != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     try:
         response = supabase.table("feed_items") \
             .select("*, papers(*)") \
@@ -36,7 +39,9 @@ def get_user_feed(user_id: str):
         raise HTTPException(status_code=500, detail="Failed to fetch feed.")
 
 @router.get("/{user_id}/saved", summary="Get a user's saved/bookmarked papers")
-def get_saved_papers(user_id: str):
+def get_saved_papers(user_id: str, current_user: dict = Depends(get_current_user)):
+    if current_user["id"] != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     try:
         response = supabase.table("feed_items") \
             .select("*, papers(*)") \
@@ -61,8 +66,14 @@ def get_saved_papers(user_id: str):
         raise HTTPException(status_code=500, detail="Failed to fetch saved papers.")
 
 @router.patch("/{feed_item_id}", summary="Save or unsave a paper")
-def update_feed_item(feed_item_id: str, update_data: FeedItemUpdate):
+def update_feed_item(feed_item_id: str, update_data: FeedItemUpdate, current_user: dict = Depends(get_current_user)):
     try:
+        owner_check = supabase.table("feed_items").select("user_id").eq("id", feed_item_id).execute()
+        if not owner_check.data:
+            raise HTTPException(status_code=404, detail="Feed item not found.")
+        if owner_check.data[0]["user_id"] != current_user["id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+
         response = supabase.table("feed_items") \
             .update({"is_saved": update_data.is_saved}) \
             .eq("id", feed_item_id) \

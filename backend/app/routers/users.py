@@ -1,9 +1,10 @@
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from app.models import UserCreate
 from app.database import supabase
 from app.services.openai_service import get_embedding
 from app.services.query_optimizer import optimize_user_interests
+from app.auth import get_current_user
 import json
 
 logger = logging.getLogger("users")
@@ -14,7 +15,9 @@ router = APIRouter(
 )
 
 @router.post("/", summary="Create a new user from onboarding")
-def create_user(user: UserCreate):
+def create_user(user: UserCreate, current_user: dict = Depends(get_current_user)):
+    if current_user["id"] != user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
     try:
         user_data = user.model_dump()
 
@@ -45,7 +48,9 @@ def create_user(user: UserCreate):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{user_id}", summary="Get a user's profile")
-def get_user(user_id: str):
+def get_user(user_id: str, current_user: dict = Depends(get_current_user)):
+    if current_user["id"] != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     try:
         response = supabase.table("users").select("id, email, domains, interest_text, created_at").eq("id", user_id).execute()
         

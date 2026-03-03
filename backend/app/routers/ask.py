@@ -1,10 +1,11 @@
 import json as _json
 import logging
 from typing import Optional
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from app.database import supabase
+from app.auth import get_current_user
 
 logger = logging.getLogger("ask")
 from app.services.openai_service import (
@@ -206,8 +207,10 @@ def _retrieve_context(question_vector: list[float], user_id: str, question: str)
 
 
 @router.post("/", summary="Ask a question against your paper corpus (text only)")
-def ask_question(request: AskRequest):
+def ask_question(request: AskRequest, current_user: dict = Depends(get_current_user)):
     """Text-only Q&A endpoint with conversation history and smart retrieval."""
+    if current_user["id"] != request.user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     try:
         logger.info("Q&A request from user %s...", request.user_id[:8])
 
@@ -251,11 +254,14 @@ async def ask_multimodal(
     question: str = Form(""),
     files: list[UploadFile] = File(default=[]),
     history: str = Form(default="[]"),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Multimodal Q&A endpoint with conversation history.
     Accepts text + files + history (JSON-encoded list of message dicts).
     """
+    if current_user["id"] != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     try:
         import json as _json
         parsed_history: list[dict] = _json.loads(history) if history else []
@@ -332,7 +338,7 @@ def _sse(event: str, data) -> str:
 
 
 @router.post("/stream", summary="Stream an answer via SSE (text only)")
-def ask_stream(request: AskRequest):
+def ask_stream(request: AskRequest, current_user: dict = Depends(get_current_user)):
     """
     SSE events emitted:
       stage -> {"stage": "...", "message": "..."}
@@ -341,6 +347,8 @@ def ask_stream(request: AskRequest):
       done -> {}
       error -> {"message": "..."}
     """
+    if current_user["id"] != request.user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     def generate():
         try:
             history = request.history or []
@@ -408,8 +416,11 @@ async def ask_stream_multimodal(
     question: str = Form(""),
     files: list[UploadFile] = File(default=[]),
     history: str = Form(default="[]"),
+    current_user: dict = Depends(get_current_user),
 ):
     """SSE streaming for multimodal (files + text) queries."""
+    if current_user["id"] != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     try:
         parsed_history: list[dict] = _json.loads(history) if history else []
     except Exception:

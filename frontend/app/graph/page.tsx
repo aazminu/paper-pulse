@@ -12,6 +12,7 @@ import { useAuth } from "@/components/auth-provider";
 import UserMenu from "@/components/user-menu";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { authFetch } from "@/lib/api";
 import dynamic from "next/dynamic";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -278,8 +279,8 @@ function GraphPageContent() {
 		const fetchGraph = async () => {
 			try {
 				const [graphRes, statsRes] = await Promise.all([
-					fetch(`${API}/graph/explore?limit=300`),
-					fetch(`${API}/graph/stats`),
+					authFetch(`${API}/graph/explore?limit=300`),
+					authFetch(`${API}/graph/stats`),
 				]);
 				if (graphRes.ok) {
 					const data = await graphRes.json();
@@ -301,7 +302,7 @@ function GraphPageContent() {
 		const fetchClusters = async () => {
 			setClustersLoading(true);
 			try {
-				const res = await fetch(`${API}/graph/clusters?limit=300`);
+				const res = await authFetch(`${API}/graph/clusters?limit=300`);
 				if (res.ok) {
 					const data = await res.json();
 					setClusters(data.clusters || []);
@@ -319,7 +320,7 @@ function GraphPageContent() {
 		if (!user?.id) return;
 		const fetchReports = async () => {
 			try {
-				const res = await fetch(
+				const res = await authFetch(
 					`${API}/graph/reports?user_id=${encodeURIComponent(user.id)}`,
 				);
 				if (res.ok) setSavedReports(await res.json());
@@ -340,7 +341,7 @@ function GraphPageContent() {
 		}
 		searchTimeoutRef.current = setTimeout(async () => {
 			try {
-				const res = await fetch(
+				const res = await authFetch(
 					`${API}/graph/search?q=${encodeURIComponent(searchQuery)}&limit=10`,
 				);
 				if (res.ok) {
@@ -362,7 +363,7 @@ function GraphPageContent() {
 		setDetailsLoading(true);
 		setNodeDetails(null);
 		try {
-			const res = await fetch(
+			const res = await authFetch(
 				`${API}/graph/node/${encodeURIComponent(node.id)}?node_type=${node.type}`,
 			);
 			if (res.ok) setNodeDetails(await res.json());
@@ -394,7 +395,7 @@ function GraphPageContent() {
 		} else {
 			(async () => {
 				try {
-					const res = await fetch(
+					const res = await authFetch(
 						`${API}/graph/paper/${encodeURIComponent(paperId)}`,
 					);
 					if (res.ok) {
@@ -553,7 +554,7 @@ function GraphPageContent() {
 
 		if (reportMode === "agent") {
 			try {
-				const res = await fetch(`${API}/graph/agent-synthesize`, {
+				const res = await authFetch(`${API}/graph/agent-synthesize`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({ node_ids: Array.from(selectedForSynthesis) }),
@@ -628,7 +629,7 @@ function GraphPageContent() {
 		const endpoint =
 			reportMode === "publication" ? "synthesize-publication" : "synthesize";
 		try {
-			const res = await fetch(`${API}/graph/${endpoint}`, {
+			const res = await authFetch(`${API}/graph/${endpoint}`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ node_ids: Array.from(selectedForSynthesis) }),
@@ -697,7 +698,7 @@ function GraphPageContent() {
 			const titleMatch = synthesisReport.match(/^#\s+(.+)$/m);
 			const title =
 				titleMatch?.[1] || `Report - ${selectedForSynthesis.size} papers`;
-			const res = await fetch(`${API}/graph/reports`, {
+			const res = await authFetch(`${API}/graph/reports`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -724,7 +725,7 @@ function GraphPageContent() {
 	/* Delete saved report */
 	const handleDeleteReport = useCallback(async (reportId: string) => {
 		try {
-			await fetch(`${API}/graph/reports/${reportId}`, { method: "DELETE" });
+			await authFetch(`${API}/graph/reports/${reportId}`, { method: "DELETE" });
 			setSavedReports((prev) => prev.filter((r) => r.id !== reportId));
 		} catch {
 			/* ignore */
@@ -736,7 +737,7 @@ function GraphPageContent() {
 		if (!viewingReport || !user?.id) return;
 		setSavingReport(true);
 		try {
-			const res = await fetch(`${API}/graph/reports`, {
+			const res = await authFetch(`${API}/graph/reports`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -777,7 +778,7 @@ function GraphPageContent() {
 			if (reportMode === "agent") {
 				(async () => {
 					try {
-						const res = await fetch(`${API}/graph/agent-synthesize`, {
+						const res = await authFetch(`${API}/graph/agent-synthesize`, {
 							method: "POST",
 							headers: { "Content-Type": "application/json" },
 							body: JSON.stringify({ node_ids: cluster.paper_ids }),
@@ -851,7 +852,7 @@ function GraphPageContent() {
 
 			const endpoint =
 				reportMode === "publication" ? "synthesize-publication" : "synthesize";
-			fetch(`${API}/graph/${endpoint}`, {
+			authFetch(`${API}/graph/${endpoint}`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ node_ids: cluster.paper_ids }),
@@ -1048,6 +1049,10 @@ function GraphPageContent() {
 
 	/* Render */
 	if (!isLoaded) return null;
+	if (!user) {
+		router.push("/sign-in");
+		return null;
+	}
 
 	const TypeIcon = (type: string) =>
 		TYPE_ICONS[type as keyof typeof TYPE_ICONS] || BookOpen;

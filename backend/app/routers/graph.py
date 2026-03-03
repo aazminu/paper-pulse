@@ -19,7 +19,7 @@ Endpoints:
 
 import json as _json
 
-from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from app.services.neo4j_service import (
@@ -38,8 +38,9 @@ from app.services.neo4j_service import (
 from app.services.openai_service import synthesize_literature_review, synthesize_publication_review
 from app.services.agent_service import run_agent_traversal
 from app.database import supabase
+from app.auth import get_current_user, require_admin
 
-router = APIRouter(prefix="/graph", tags=["Knowledge Graph"])
+router = APIRouter(prefix="/graph", tags=["Knowledge Graph"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("/paper/{arxiv_id}")
@@ -201,8 +202,10 @@ class SaveReportRequest(BaseModel):
 
 
 @router.get("/reports")
-def list_reports(user_id: str = Query(...)):
+def list_reports(user_id: str = Query(...), current_user: dict = Depends(get_current_user)):
     """List saved synthesis reports for a user."""
+    if current_user["id"] != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     try:
         resp = (
             supabase.table("synthesis_reports")
@@ -217,8 +220,10 @@ def list_reports(user_id: str = Query(...)):
 
 
 @router.post("/reports")
-def save_report(req: SaveReportRequest):
+def save_report(req: SaveReportRequest, current_user: dict = Depends(get_current_user)):
     """Save a synthesis report."""
+    if current_user["id"] != req.user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     try:
         resp = (
             supabase.table("synthesis_reports")
@@ -238,9 +243,14 @@ def save_report(req: SaveReportRequest):
 
 
 @router.delete("/reports/{report_id}")
-def delete_report(report_id: str):
+def delete_report(report_id: str, current_user: dict = Depends(get_current_user)):
     """Delete a saved synthesis report."""
     try:
+        owner_check = supabase.table("synthesis_reports").select("user_id").eq("id", report_id).execute()
+        if not owner_check.data:
+            raise HTTPException(status_code=404, detail="Report not found")
+        if owner_check.data[0]["user_id"] != current_user["id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
         supabase.table("synthesis_reports").delete().eq("id", report_id).execute()
         return {"status": "deleted"}
     except Exception as e:
@@ -262,7 +272,7 @@ def _run_graph_populate_bg(paper_ids: list[str] | None = None):
         _graph_populate_status["running"] = False
 
 
-@router.post("/populate")
+@router.post("/populate", dependencies=[Depends(require_admin)])
 def trigger_population(background_tasks: BackgroundTasks, paper_ids: list[str] | None = None):
     """Manually trigger graph population for specific papers or recent papers."""
     if _graph_populate_status["running"]:
@@ -271,7 +281,7 @@ def trigger_population(background_tasks: BackgroundTasks, paper_ids: list[str] |
     return {"status": "started", "message": "Graph population started in background"}
 
 
-@router.get("/populate/status")
+@router.get("/populate/status", dependencies=[Depends(require_admin)])
 def populate_status():
     """Check graph population status."""
     return _graph_populate_status

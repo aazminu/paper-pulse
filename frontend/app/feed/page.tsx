@@ -5,6 +5,7 @@ import { useAuth } from "@/components/auth-provider";
 import UserMenu from "@/components/user-menu";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { authFetch } from "@/lib/api";
 import {
 	Card,
 	CardContent,
@@ -110,7 +111,7 @@ export default function FeedPage() {
 		const fetchFeed = async () => {
 			if (!user) return;
 			try {
-				const res = await fetch(
+				const res = await authFetch(
 					`${process.env.NEXT_PUBLIC_API_URL}/feed/${user.id}`,
 				);
 				if (res.ok) {
@@ -121,7 +122,7 @@ export default function FeedPage() {
 						setIsBootstrapping(true);
 						pollRef.current = setInterval(async () => {
 							try {
-								const pollRes = await fetch(
+								const pollRes = await authFetch(
 									`${process.env.NEXT_PUBLIC_API_URL}/feed/${user.id}`,
 								);
 								if (pollRes.ok) {
@@ -210,7 +211,7 @@ export default function FeedPage() {
 		);
 
 		try {
-			await fetch(`${process.env.NEXT_PUBLIC_API_URL}/feed/${feedItemId}`, {
+			await authFetch(`${process.env.NEXT_PUBLIC_API_URL}/feed/${feedItemId}`, {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ is_saved: !currentStatus }),
@@ -226,6 +227,10 @@ export default function FeedPage() {
 	};
 
 	if (!isLoaded) return null;
+	if (!user) {
+		router.push("/sign-in");
+		return null;
+	}
 
 	return (
 		<div className="min-h-screen bg-zinc-50 dark:bg-black">
