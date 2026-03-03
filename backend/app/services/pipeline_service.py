@@ -66,6 +66,237 @@ def _deduplicate_papers(paper_lists: list[list[dict]]) -> list[dict]:
     return merged
 
 
+def run_single_user_pipeline(user_id: str):
+    """
+    Bootstrap pipeline for a single new user.
+    Fetches papers, embeds, summarizes, reranks, and populates their feed.
+    Called right after onboarding so the user sees content immediately.
+    """
+    print(f"\n{'=' * 60}")
+    print(f"Bootstrapping feed for user {user_id[:8]}...")
+    print(f"{'=' * 60}")
+
+    user_resp = supabase.table("users").select("*").eq("id", user_id).execute()
+    if not user_resp.data:
+        print(f"  User {user_id} not found, aborting.")
+        return
+
+    user = user_resp.data[0]
+    domains = user.get("domains", [])
+    interest_text = user.get("interest_text", "") or ""
+
+    if not domains:
+        print(f"  No domains selected, aborting.")
+        return
+
+    optimized_raw = user.get("optimized_queries")
+    if optimized_raw:
+        try:
+            optimized = json.loads(optimized_raw) if isinstance(optimized_raw, str) else optimized_raw
+        except (json.JSONDecodeError, TypeError):
+            optimized = None
+    else:
+        optimized = None
+
+    if not optimized or not optimized.get("search_queries"):
+        optimized = optimize_user_interests(interest_text, domains)
+        try:
+            supabase.table("users").update({
+                "optimized_queries": json.dumps(optimized)
+            }).eq("id", user_id).execute()
+        except Exception as e:
+            print(f"  Failed to cache optimized queries: {e}")
+
+    search_queries = optimized.get("search_queries", [])
+    keywords = optimized.get("keywords", [])
+    arxiv_categories = optimized.get("arxiv_categories", [])
+    rerank_query = " ".join(search_queries) if search_queries else interest_text
+
+    print(f"  domains={domains}")
+    print(f"  queries: {search_queries}")
+
+    arxiv, s2, pubmed, openalex = [], [], [], []
+
+    try:
+        arxiv = fetch_arxiv(
+            domains, max_results=PER_SOURCE_LIMIT,
+            search_queries=search_queries or None,
+            arxiv_categories=arxiv_categories or None,
+        )
+    except Exception as e:
+        print(f"  [ArXiv] Error: {e}")
+
+    try:
+        s2 = fetch_s2(
+            domains, max_results=PER_SOURCE_LIMIT,
+            search_queries=search_queries or None,
+        )
+    except Exception as e:
+        print(f"  [S2] Error: {e}")
+
+    try:
+        pubmed = fetch_pubmed(
+            domains, max_results=PER_SOURCE_LIMIT,
+            search_queries=search_queries or None,
+        )
+    except Exception as e:
+        print(f"  [PubMed] Error: {e}")
+
+    try:
+        openalex = fetch_openalex(
+            domains, max_results=PER_SOURCE_LIMIT,
+            search_queries=search_queries or None,
+        )
+    except Exception as e:
+        print(f"  [OpenAlex] Error: {e}")
+
+    all_papers = _deduplicate_papers([arxiv, s2, pubmed, openalex])
+    print(f"  Fetched {len(all_papers)} unique papers "
+          f"(ArXiv={len(arxiv)}, S2={len(s2)}, PubMed={len(pubmed)}, OpenAlex={len(openalex)})")
+
+    if not all_papers:
+        print("  No papers found, aborting.")
+        return
+
+    processed_papers: dict[str, dict] = {}
+    papers_to_embed: list[tuple[str, dict]] = []
+
+    for paper in all_papers:
+        pid = paper["arxiv_id"]
+        existing = supabase.table("papers").select("arxiv_id").eq("arxiv_id", pid).execute()
+        if existing.data:
+            full = supabase.table("papers").select("*").eq("arxiv_id", pid).execute()
+            processed_papers[pid] = full.data[0]
+            continue
+
+        paper_record = {
+            "arxiv_id": pid,
+            "title": paper["title"],
+            "authors": paper["authors"],
+            "published_date": paper["published_date"].isoformat()
+                if hasattr(paper["published_date"], "isoformat")
+                else str(paper["published_date"]),
+            "abstract": paper["abstract"],
+            "url": paper["url"],
+            "source": paper.get("source", "unknown"),
+            "doi": paper.get("doi", None),
+        }
+        processed_papers[pid] = paper_record
+        papers_to_embed.append((pid, paper_record))
+
+    print(f"  New papers to embed: {len(papers_to_embed)}")
+
+    arxiv_papers_to_extract = [
+        (pid, rec) for pid, rec in papers_to_embed
+        if rec.get("source") == "arxiv"
+    ]
+    full_texts: dict[str, str | None] = {}
+    if arxiv_papers_to_extract:
+        print(f"  Extracting full text from {len(arxiv_papers_to_extract)} ArXiv PDFs...")
+        ids_to_extract = [pid for pid, _ in arxiv_papers_to_extract]
+        full_texts = batch_extract_arxiv(ids_to_extract, rate_limit=1.0)
+
+    if papers_to_embed:
+        for batch_start in range(0, len(papers_to_embed), EMBEDDING_BATCH_SIZE):
+            batch = papers_to_embed[batch_start : batch_start + EMBEDDING_BATCH_SIZE]
+            texts = [f"{p['title']}. {p['abstract']}" for _, p in batch]
+
+            print(f"  Embedding batch {batch_start // EMBEDDING_BATCH_SIZE + 1} "
+                  f"({len(batch)} papers)...")
+            vectors = get_embeddings_batch(texts)
+
+            for (pid, paper_record), vector in zip(batch, vectors):
+                paper_record["abstract_vector"] = vector
+
+                ft = full_texts.get(pid)
+                if ft:
+                    paper_record["full_text"] = ft
+
+                summary = generate_paper_summary(paper_record["abstract"])
+                paper_record["summary"] = summary
+
+                try:
+                    supabase.table("papers").insert(paper_record).execute()
+                except Exception as db_err:
+                    print(f"  DB insert error for {pid}: {db_err}")
+
+                processed_papers[pid] = paper_record
+
+    papers_with_text = [
+        processed_papers[pid]
+        for pid, _ in papers_to_embed
+        if processed_papers.get(pid, {}).get("full_text")
+    ]
+    if papers_with_text:
+        print(f"  Chunking {len(papers_with_text)} full-text papers...")
+        all_chunks = batch_chunk_papers(papers_with_text)
+        if all_chunks:
+            for batch_start in range(0, len(all_chunks), EMBEDDING_BATCH_SIZE):
+                batch = all_chunks[batch_start : batch_start + EMBEDDING_BATCH_SIZE]
+                chunk_texts = [c["chunk_text"] for c in batch]
+                chunk_vectors = get_embeddings_batch(chunk_texts)
+
+                for chunk, vector in zip(batch, chunk_vectors):
+                    chunk_record = {
+                        "paper_id": chunk["paper_id"],
+                        "chunk_index": chunk["chunk_index"],
+                        "chunk_text": chunk["chunk_text"],
+                        "chunk_vector": vector,
+                    }
+                    for attempt in range(3):
+                        try:
+                            supabase.table("paper_chunks").insert(chunk_record).execute()
+                            break
+                        except Exception as chunk_err:
+                            if attempt < 2:
+                                import time as _t
+                                _t.sleep(2 * (attempt + 1))
+                            else:
+                                print(f"    Chunk insert failed: {chunk_err}")
+
+    if not rerank_query:
+        rerank_query = interest_text or "recent research"
+
+    user_pool = list(processed_papers.values())
+    print(f"  Reranking {len(user_pool)} papers -> top {TOP_MATCHES_PER_USER}")
+
+    if len(user_pool) > TOP_MATCHES_PER_USER:
+        reranked = rerank_papers(
+            query=rerank_query,
+            papers=user_pool,
+            top_n=TOP_MATCHES_PER_USER,
+        )
+    else:
+        reranked = user_pool
+
+    feed_items = 0
+    for rank, paper in enumerate(reranked):
+        relevance_score = paper.get("_rerank_score",
+                          1.0 - (rank / max(len(reranked), 1)))
+        feed_record = {
+            "user_id": user_id,
+            "paper_id": paper["arxiv_id"],
+            "relevance_score": relevance_score,
+            "is_saved": False,
+        }
+        try:
+            supabase.table("feed_items").insert(feed_record).execute()
+            feed_items += 1
+        except Exception:
+            pass
+
+    try:
+        from app.services.graph_pipeline_service import run_graph_pipeline
+        new_ids = [pid for pid, _ in papers_to_embed]
+        if new_ids:
+            run_graph_pipeline(paper_ids=new_ids)
+    except Exception as e:
+        print(f"  [Graph Pipeline] Error (non-fatal): {e}")
+
+    print(f"  Bootstrap complete! {feed_items} feed items created.")
+    return {"status": "success", "feed_items_created": feed_items}
+
+
 def run_daily_pipeline():
     """
     LLM-optimized per-user pipeline:

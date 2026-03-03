@@ -1,5 +1,5 @@
 from fastapi import APIRouter, BackgroundTasks
-from app.services.pipeline_service import run_daily_pipeline
+from app.services.pipeline_service import run_daily_pipeline, run_single_user_pipeline
 
 router = APIRouter(
     prefix="/pipeline",
@@ -25,6 +25,11 @@ def trigger_pipeline(background_tasks: BackgroundTasks):
         return {"status": "already_running", "message": "Pipeline is already in progress"}
     background_tasks.add_task(_run_pipeline_bg)
     return {"status": "started", "message": "Pipeline started in background"}
+
+@router.post("/bootstrap/{user_id}", summary="Run pipeline for a single new user")
+def bootstrap_user(user_id: str, background_tasks: BackgroundTasks):
+    background_tasks.add_task(run_single_user_pipeline, user_id)
+    return {"status": "started", "message": "Bootstrapping feed for new user"}
 
 @router.get("/status", summary="Check pipeline status")
 def pipeline_status():

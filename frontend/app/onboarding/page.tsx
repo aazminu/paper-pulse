@@ -116,6 +116,10 @@ export default function OnboardingPage() {
 			);
 
 			if (response.ok) {
+				fetch(
+					`${process.env.NEXT_PUBLIC_API_URL}/pipeline/bootstrap/${user.id}`,
+					{ method: "POST" },
+				).catch(() => {});
 				router.push("/feed");
 			} else {
 				const errorData = await response.json();

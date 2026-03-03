@@ -100,8 +100,10 @@ export default function FeedPage() {
 	const router = useRouter();
 	const [feed, setFeed] = useState<FeedItem[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
+	const [isBootstrapping, setIsBootstrapping] = useState(false);
 	const [activeDate, setActiveDate] = useState<string | null>(null);
 	const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+	const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
 	useEffect(() => {
 		const fetchFeed = async () => {
@@ -113,6 +115,25 @@ export default function FeedPage() {
 				if (res.ok) {
 					const data = await res.json();
 					setFeed(data);
+
+					if (data.length === 0) {
+						setIsBootstrapping(true);
+						pollRef.current = setInterval(async () => {
+							try {
+								const pollRes = await fetch(
+									`${process.env.NEXT_PUBLIC_API_URL}/feed/${user.id}`,
+								);
+								if (pollRes.ok) {
+									const pollData = await pollRes.json();
+									if (pollData.length > 0) {
+										setFeed(pollData);
+										setIsBootstrapping(false);
+										if (pollRef.current) clearInterval(pollRef.current);
+									}
+								}
+							} catch {}
+						}, 30000);
+					}
 				}
 			} catch (error) {
 				console.error("Failed to fetch feed:", error);
@@ -124,6 +145,10 @@ export default function FeedPage() {
 		if (isLoaded) {
 			fetchFeed();
 		}
+
+		return () => {
+			if (pollRef.current) clearInterval(pollRef.current);
+		};
 	}, [user, isLoaded]);
 
 	const dateGroups = useMemo<DateGroup[]>(() => {
@@ -266,13 +291,39 @@ export default function FeedPage() {
 					{/* Empty State */}
 					{!isLoading && feed.length === 0 && (
 						<div className="text-center py-24 border-2 border-dashed rounded-xl">
-							<BrainCircuit className="mx-auto h-12 w-12 text-zinc-300 mb-4" />
-							<h3 className="text-lg font-medium">
-								No papers in your feed yet.
-							</h3>
-							<p className="text-zinc-500">
-								Check back after the nightly pipeline runs!
-							</p>
+							{isBootstrapping ? (
+								<>
+									<Sparkles className="mx-auto h-12 w-12 text-zinc-400 mb-4 animate-pulse" />
+									<h3 className="text-lg font-medium">
+										Preparing your first papers...
+									</h3>
+									<p className="text-zinc-500 mt-2 max-w-md mx-auto">
+										We&apos;re fetching papers from ArXiv, Semantic Scholar,
+										PubMed &amp; OpenAlex, extracting full texts, generating
+										embeddings and AI summaries, then ranking everything for
+										you. This can take 30–60 minutes. Feel free to close this
+										tab and come back later.
+									</p>
+									<div className="mt-6 flex justify-center">
+										<div className="h-1.5 w-48 bg-zinc-200 dark:bg-zinc-800 rounded-full overflow-hidden">
+											<div className="h-full w-1/2 bg-zinc-400 dark:bg-zinc-500 rounded-full animate-[pulse_2s_ease-in-out_infinite]" />
+										</div>
+									</div>
+									<p className="text-xs text-zinc-400 mt-4">
+										This page checks for new papers automatically.
+									</p>
+								</>
+							) : (
+								<>
+									<BrainCircuit className="mx-auto h-12 w-12 text-zinc-300 mb-4" />
+									<h3 className="text-lg font-medium">
+										No papers in your feed yet.
+									</h3>
+									<p className="text-zinc-500">
+										Check back after the nightly pipeline runs!
+									</p>
+								</>
+							)}
 						</div>
 					)}
 
