@@ -17,11 +17,7 @@ export async function createClient() {
 						cookiesToSet.forEach(({ name, value, options }) =>
 							cookieStore.set(name, value, options),
 						);
-					} catch {
-						// setAll is called from a Server Component where cookies
-						// cannot be set. This can be ignored when the middleware
-						// refreshes the session.
-					}
+					} catch {}
 				},
 			},
 		},

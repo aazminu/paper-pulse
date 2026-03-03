@@ -1,11 +1,5 @@
 import { createClient } from "@/utils/supabase/client";
 
-/**
- * Authenticated fetch wrapper. Gets the current Supabase session token
- * and injects it as a Bearer Authorization header on every request.
- *
- * Drop-in replacement for `fetch()` in client components.
- */
 export async function authFetch(
 	input: RequestInfo | URL,
 	init?: RequestInit,

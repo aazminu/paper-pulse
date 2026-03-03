@@ -28,7 +28,7 @@ class CreateChatRequest(BaseModel):
     user_id: str
 
 class SaveMessageRequest(BaseModel):
-    role: str  # "user" | "ai"
+    role: str
     content: str = ""
     sources: list = []
     attachments: list = []

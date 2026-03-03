@@ -78,7 +78,7 @@ def fetch_openalex_affiliations(papers: list[dict]) -> list[dict]:
                                 "institution": inst_name,
                             })
 
-            time.sleep(0.3)  # Rate limit
+            time.sleep(0.3)
         except Exception as e:
             logger.warning("OpenAlex affiliation fetch error for DOI %s: %s", doi, e)
             continue

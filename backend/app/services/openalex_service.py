@@ -25,34 +25,34 @@ logger = logging.getLogger("openalex")
 
 OPENALEX_BASE_URL = "https://api.openalex.org"
 OPENALEX_MAILTO = os.getenv("OPENALEX_MAILTO", "")
-OPENALEX_RATE_LIMIT = 0.2 # seconds between requests 
+OPENALEX_RATE_LIMIT = 0.2
 
 DOMAIN_TO_CONCEPT = {
-    "cs": "C41008148",       # Computer Science
-    "math": "C33923547",     # Mathematics
-    "physics": "C121332964", # Physics
-    "q-bio": "C86803240",   # Biology
-    "q-fin": "C162324750",  # Economics
-    "stat": "C105795698",   # Statistics
-    "eess": "C127413603",   # Engineering
-    "econ": "C162324750",   # Economics
-    "med": "C71924100",     # Medicine
-    "bio": "C86803240",     # Biology
-    "chem": "C185592680",   # Chemistry
-    "env": "C39432304",     # Environmental Science
-    "mat-sci": "C192562407",# Materials Science
-    "psych": "C15744967",   # Psychology
-    "geo": "C127313418",    # Geology
-    "soc": "C144024400",    # Sociology
-    "poli-sci": "C17744445",# Political Science
-    "phil": "C138885662",   # Philosophy
-    "hist": "C95457728",    # History
-    "ling": "C41895202",    # Linguistics
-    "art": "C142362112",    # Art
-    "bus": "C144133560",    # Business
-    "agri": "C118552586",   # Agricultural and Food Sciences
-  "educ": "C185592680",  # Education 
-  "law": "C138885662",  # Law 
+    "cs": "C41008148",
+    "math": "C33923547",
+    "physics": "C121332964",
+    "q-bio": "C86803240",
+    "q-fin": "C162324750",
+    "stat": "C105795698",
+    "eess": "C127413603",
+    "econ": "C162324750",
+    "med": "C71924100",
+    "bio": "C86803240",
+    "chem": "C185592680",
+    "env": "C39432304",
+    "mat-sci": "C192562407",
+    "psych": "C15744967",
+    "geo": "C127313418",
+    "soc": "C144024400",
+    "poli-sci": "C17744445",
+    "phil": "C138885662",
+    "hist": "C95457728",
+    "ling": "C41895202",
+    "art": "C142362112",
+    "bus": "C144133560",
+    "agri": "C118552586",
+    "educ": "C185592680",
+    "law": "C138885662",
     "astro-ph": "C121332964",
     "cond-mat": "C121332964",
     "gr-qc": "C121332964",

@@ -56,7 +56,7 @@ def fetch_citations_s2(arxiv_id: str) -> dict:
 
     refs_url = f"{S2_BASE}/ARXIV:{clean_id}/references?fields={S2_FIELDS}&limit=100"
     refs_data = _s2_get(refs_url)
-    time.sleep(1.0)  # Rate limit
+    time.sleep(1.0)
 
     if refs_data and "data" in refs_data:
         for item in refs_data["data"]:

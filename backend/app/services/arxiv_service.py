@@ -10,7 +10,7 @@ logger = logging.getLogger("arxiv")
 
 OAI_NS = {'atom': 'http://www.w3.org/2005/Atom'}
 
-ARXIV_BATCH_SIZE = 100  # Max per single API call 
+ARXIV_BATCH_SIZE = 100
 ARXIV_RATE_LIMIT_SECONDS = 3
 
 

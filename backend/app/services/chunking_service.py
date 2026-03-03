@@ -20,9 +20,9 @@ from typing import Optional
 
 import tiktoken
 
-CHUNK_SIZE_TOKENS = 512     # Target tokens per chunk
-CHUNK_OVERLAP_TOKENS = 50   # Overlap between consecutive chunks
-MIN_CHUNK_TOKENS = 50       # Skip chunks smaller than this
+CHUNK_SIZE_TOKENS = 512
+CHUNK_OVERLAP_TOKENS = 50
+MIN_CHUNK_TOKENS = 50
 
 _enc = tiktoken.get_encoding("cl100k_base")
 

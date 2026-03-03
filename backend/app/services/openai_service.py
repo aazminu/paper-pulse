@@ -19,8 +19,8 @@ EMBEDDING_MODEL = "text-embedding-3-large"
 EMBEDDING_DIMENSIONS = 1536
 QA_MODEL = "gpt-4.1"
 SUMMARY_MODEL = "o4-mini"
-MAX_COMPLETION_TOKENS = 16384     # max output tokens
-MAX_CONTEXT_TOKENS = 32000        # max context window
+MAX_COMPLETION_TOKENS = 16384
+MAX_CONTEXT_TOKENS = 32000
 _enc = tiktoken.get_encoding("cl100k_base")
 
 

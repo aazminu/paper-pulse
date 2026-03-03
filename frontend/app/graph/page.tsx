@@ -534,7 +534,7 @@ function GraphPageContent() {
 	/* Synthesize controls */
 	const toggleSelectMode = useCallback(() => {
 		setSelectMode((prev) => {
-			if (prev) setSelectedForSynthesis(new Set()); // exiting: clear selection
+			if (prev) setSelectedForSynthesis(new Set());
 			return !prev;
 		});
 	}, []);

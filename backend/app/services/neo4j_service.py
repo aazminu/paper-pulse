@@ -5,7 +5,7 @@ Graph Schema:
   Nodes:
     (:Paper  {arxiv_id, title, published_date, source, url})
     (:Author {name, name_lower})
-    (:Concept {name, name_lower, category})       # method / dataset / theory / task / technique
+    (:Concept {name, name_lower, category})
     (:Institution {name, name_lower})
 
   Relationships:
@@ -17,9 +17,11 @@ Graph Schema:
 
 import logging
 import os
+import time
 from contextlib import contextmanager
 from dotenv import load_dotenv
 from neo4j import GraphDatabase
+from neo4j.exceptions import ServiceUnavailable, SessionExpired
 
 load_dotenv()
 
@@ -36,7 +38,12 @@ def get_driver():
     global _driver
     if _driver is None:
         logger.info("Connecting to Neo4j at %s (user=%s)", NEO4J_URI, NEO4J_USER)
-        _driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+        _driver = GraphDatabase.driver(
+            NEO4J_URI,
+            auth=(NEO4J_USER, NEO4J_PASSWORD),
+            max_connection_lifetime=200,
+            connection_acquisition_timeout=60,
+        )
     return _driver
 
 
@@ -47,14 +54,48 @@ def close_driver():
         _driver = None
 
 
+def _reset_driver():
+    """Close and discard the current driver so the next call creates a fresh one."""
+    global _driver
+    if _driver:
+        try:
+            _driver.close()
+        except Exception:
+            pass
+        _driver = None
+
+
 @contextmanager
-def get_session():
-    driver = get_driver()
-    session = driver.session()
-    try:
-        yield session
-    finally:
-        session.close()
+def get_session(retries: int = 3, backoff: float = 2.0):
+    """
+    Open a Neo4j session with automatic retry on cold-start / connection errors.
+
+    Neo4j Aura free-tier pauses after inactivity; the first connection attempt
+    often fails with ServiceUnavailable or SessionExpired while the instance
+    resumes.  We retry with exponential back-off so callers don't need to care.
+    """
+    last_err = None
+    for attempt in range(1, retries + 1):
+        try:
+            driver = get_driver()
+            session = driver.session()
+            try:
+                yield session
+                return
+            finally:
+                session.close()
+        except (ServiceUnavailable, SessionExpired, OSError) as e:
+            last_err = e
+            logger.warning(
+                "Neo4j connection attempt %d/%d failed: %s – retrying in %.1fs",
+                attempt, retries, e, backoff * attempt,
+            )
+            _reset_driver()
+            if attempt < retries:
+                time.sleep(backoff * attempt)
+
+    # All retries exhausted
+    raise last_err  # type: ignore[misc]
 
 
 def init_schema():
@@ -75,7 +116,7 @@ def init_schema():
                     "FOR (c:Concept) ON EACH [c.name]"
                 )
             except Exception:
-                pass  # index may already exist
+                pass
         logger.info("Schema initialized")
     except Exception as e:
         logger.error("Failed to connect to Neo4j at %s: %s", NEO4J_URI, e)
@@ -578,7 +619,7 @@ def detect_clusters(limit: int = 200) -> list[dict]:
         citation_pairs = set()
         for r in cite_result:
             citation_pairs.add((r["from_id"], r["to_id"]))
-            citation_pairs.add((r["to_id"], r["from_id"]))  # bidirectional for clustering
+            citation_pairs.add((r["to_id"], r["from_id"]))
 
     adj: dict[str, set[str]] = defaultdict(set)
     pid_list = list(papers.keys())

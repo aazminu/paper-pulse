@@ -40,9 +40,9 @@ from app.services.chunking_service import batch_chunk_papers
 
 logger = logging.getLogger("pipeline")
 
-PER_SOURCE_LIMIT = 30         # Papers per source per user 
-EMBEDDING_BATCH_SIZE = 64     # Papers to embed in one API call
-TOP_MATCHES_PER_USER = 25     # Feed items per user after re-ranking
+PER_SOURCE_LIMIT = 30
+EMBEDDING_BATCH_SIZE = 64
+TOP_MATCHES_PER_USER = 25
 
 
 def _deduplicate_papers(paper_lists: list[list[dict]]) -> list[dict]:
@@ -620,7 +620,7 @@ def run_daily_pipeline():
                 supabase.table("feed_items").insert(feed_record).execute()
                 feed_items_created += 1
             except Exception:
-                pass  # UNIQUE constraint - already in feed
+                pass
 
     logger.info("=" * 60)
     logger.info("Feed pipeline complete!")

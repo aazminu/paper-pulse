@@ -957,7 +957,7 @@ function AskPageContent() {
 			setMessages([]);
 			return;
 		}
-		if (streamingRef.current) return; // don't overwrite while streaming
+		if (streamingRef.current) return;
 		loadChatMessages(activeChatId);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [activeChatId]);
@@ -1269,7 +1269,7 @@ function AskPageContent() {
 			buf += decoder.decode(value, { stream: true });
 
 			const parts = buf.split("\n\n");
-			buf = parts.pop() || ""; // keep last incomplete chunk
+			buf = parts.pop() || "";
 
 			for (const part of parts) {
 				const lines = part.split("\n");

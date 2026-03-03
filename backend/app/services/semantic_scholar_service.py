@@ -25,7 +25,7 @@ logger = logging.getLogger("semantic_scholar")
 S2_API_KEY = os.getenv("SEMANTIC_SCHOLAR_API_KEY", "")
 S2_BASE_URL = "https://api.semanticscholar.org/graph/v1"
 S2_FIELDS = "paperId,title,abstract,authors,year,url,publicationDate,citationCount,fieldsOfStudy,externalIds"
-S2_RATE_LIMIT = 1.0  # seconds between requests (unauthenticated: 1000 rps shared pool)
+S2_RATE_LIMIT = 1.0
 
 DOMAIN_TO_FIELDS = {
     "cs": "Computer Science",
@@ -83,7 +83,7 @@ def _parse_paper(raw: dict) -> Optional[dict]:
         abstract = (raw.get("abstract") or "").strip()
 
         if not title or not abstract:
-            return None  # Skip papers without usable content
+            return None
 
         authors = [a.get("name", "") for a in (raw.get("authors") or []) if a.get("name")]
 
@@ -201,7 +201,7 @@ def fetch_recent_papers(
                 time.sleep(retry_after)
                 continue
 
-            fetch_recent_papers._retries = 0  # Reset on success
+            fetch_recent_papers._retries = 0
 
             if resp.status_code != 200:
                 logger.warning("[S2] HTTP %d for query, skipping", resp.status_code)

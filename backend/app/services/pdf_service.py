@@ -27,9 +27,9 @@ logger = logging.getLogger("pdf")
 
 
 ARXIV_PDF_BASE = "https://arxiv.org/pdf/{arxiv_id}.pdf"
-PDF_DOWNLOAD_TIMEOUT = 30  # seconds
-PDF_RATE_LIMIT_SECONDS = 1  # Be polite to ArXiv servers
-MAX_TEXT_CHARS = 120_000  # ~30K tokens - keeps embedding + LLM calls reasonable
+PDF_DOWNLOAD_TIMEOUT = 30
+PDF_RATE_LIMIT_SECONDS = 1
+MAX_TEXT_CHARS = 120_000
 USER_AGENT = "PaperPulse/1.0 (Academic Research Tool; mailto:paperpulse@example.com)"
 
 
@@ -102,7 +102,7 @@ def _clean_extracted_text(text: str) -> str:
  - Remove reference numbering artifacts
  - Normalize unicode
     """
-    text = text.replace('\u0000', '')  # strip null bytes
+    text = text.replace('\u0000', '')
     text = re.sub(r'\n{3,}', '\n\n', text)
 
     text = re.sub(r' {2,}', ' ', text)

@@ -18,10 +18,12 @@ Endpoints:
 """
 
 import json as _json
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from neo4j.exceptions import ServiceUnavailable, SessionExpired
 from app.services.neo4j_service import (
     get_paper_graph,
     get_related_papers,
@@ -40,13 +42,19 @@ from app.services.agent_service import run_agent_traversal
 from app.database import supabase
 from app.auth import get_current_user, require_admin
 
+logger = logging.getLogger("graph")
+
 router = APIRouter(prefix="/graph", tags=["Knowledge Graph"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("/paper/{arxiv_id}")
 def paper_graph(arxiv_id: str):
     """Get a paper's full graph neighborhood (authors, concepts, citations)."""
-    result = get_paper_graph(arxiv_id)
+    try:
+        result = get_paper_graph(arxiv_id)
+    except (ServiceUnavailable, SessionExpired, OSError) as e:
+        logger.warning("Neo4j unavailable for paper_graph: %s", e)
+        raise HTTPException(status_code=503, detail="Knowledge graph is temporarily unavailable. Please retry in a moment.")
     if not result:
         raise HTTPException(status_code=404, detail="Paper not found in graph")
     return result
@@ -55,49 +63,77 @@ def paper_graph(arxiv_id: str):
 @router.get("/paper/{arxiv_id}/related")
 def related_papers(arxiv_id: str, limit: int = Query(default=10, le=50)):
     """Find papers related via shared concepts, citations, or co-authors."""
-    results = get_related_papers(arxiv_id, limit=limit)
+    try:
+        results = get_related_papers(arxiv_id, limit=limit)
+    except (ServiceUnavailable, SessionExpired, OSError) as e:
+        logger.warning("Neo4j unavailable for related_papers: %s", e)
+        raise HTTPException(status_code=503, detail="Knowledge graph is temporarily unavailable. Please retry in a moment.")
     return {"paper_id": arxiv_id, "related": results}
 
 
 @router.get("/paper/{arxiv_id}/citations")
 def citation_network(arxiv_id: str, depth: int = Query(default=2, le=3)):
     """Get citation network up to N hops for visualization."""
-    result = get_citation_network(arxiv_id, depth=depth)
+    try:
+        result = get_citation_network(arxiv_id, depth=depth)
+    except (ServiceUnavailable, SessionExpired, OSError) as e:
+        logger.warning("Neo4j unavailable for citation_network: %s", e)
+        raise HTTPException(status_code=503, detail="Knowledge graph is temporarily unavailable. Please retry in a moment.")
     return result
 
 
 @router.get("/author/{name}")
 def author_network(name: str, limit: int = Query(default=20, le=50)):
     """Get co-author network for an author."""
-    result = get_author_network(name, limit=limit)
+    try:
+        result = get_author_network(name, limit=limit)
+    except (ServiceUnavailable, SessionExpired, OSError) as e:
+        logger.warning("Neo4j unavailable for author_network: %s", e)
+        raise HTTPException(status_code=503, detail="Knowledge graph is temporarily unavailable. Please retry in a moment.")
     return result
 
 
 @router.get("/concept/{name}")
 def concept_papers_route(name: str, limit: int = Query(default=20, le=50)):
     """Get papers involving a specific concept."""
-    results = get_concept_papers(name, limit=limit)
+    try:
+        results = get_concept_papers(name, limit=limit)
+    except (ServiceUnavailable, SessionExpired, OSError) as e:
+        logger.warning("Neo4j unavailable for concept_papers: %s", e)
+        raise HTTPException(status_code=503, detail="Knowledge graph is temporarily unavailable. Please retry in a moment.")
     return {"concept": name, "papers": results}
 
 
 @router.get("/explore")
 def graph_explorer(limit: int = Query(default=200, le=500)):
     """Get full graph data for the interactive explorer."""
-    result = get_full_graph_visualization(limit=limit)
+    try:
+        result = get_full_graph_visualization(limit=limit)
+    except (ServiceUnavailable, SessionExpired, OSError) as e:
+        logger.warning("Neo4j unavailable for graph_explorer: %s", e)
+        raise HTTPException(status_code=503, detail="Knowledge graph is temporarily unavailable. Please retry in a moment.")
     return result
 
 
 @router.get("/stats")
 def graph_statistics():
     """Get knowledge graph statistics."""
-    stats = get_graph_stats()
+    try:
+        stats = get_graph_stats()
+    except (ServiceUnavailable, SessionExpired, OSError) as e:
+        logger.warning("Neo4j unavailable for graph_statistics: %s", e)
+        raise HTTPException(status_code=503, detail="Knowledge graph is temporarily unavailable. Please retry in a moment.")
     return stats
 
 
 @router.get("/node/{node_id:path}")
 def node_details(node_id: str, node_type: str = Query(...)):
     """Get detailed neighborhood info for a single node."""
-    result = get_node_neighborhood(node_id, node_type)
+    try:
+        result = get_node_neighborhood(node_id, node_type)
+    except (ServiceUnavailable, SessionExpired, OSError) as e:
+        logger.warning("Neo4j unavailable for node_details: %s", e)
+        raise HTTPException(status_code=503, detail="Knowledge graph is temporarily unavailable. Please retry in a moment.")
     if not result:
         raise HTTPException(status_code=404, detail="Node not found")
     return result
@@ -106,14 +142,22 @@ def node_details(node_id: str, node_type: str = Query(...)):
 @router.get("/search")
 def search_nodes(q: str = Query(..., min_length=1), limit: int = Query(default=20, le=50)):
     """Search across papers, authors, and concepts."""
-    results = search_graph_nodes(q, limit=limit)
+    try:
+        results = search_graph_nodes(q, limit=limit)
+    except (ServiceUnavailable, SessionExpired, OSError) as e:
+        logger.warning("Neo4j unavailable for search_nodes: %s", e)
+        raise HTTPException(status_code=503, detail="Knowledge graph is temporarily unavailable. Please retry in a moment.")
     return {"results": results}
 
 
 @router.get("/clusters")
 def get_clusters(limit: int = Query(default=200, le=500)):
     """Detect paper clusters based on shared concepts and citations."""
-    clusters = detect_clusters(limit=limit)
+    try:
+        clusters = detect_clusters(limit=limit)
+    except (ServiceUnavailable, SessionExpired, OSError) as e:
+        logger.warning("Neo4j unavailable for get_clusters: %s", e)
+        raise HTTPException(status_code=503, detail="Knowledge graph is temporarily unavailable. Please retry in a moment.")
     return {"clusters": clusters}
 
 
@@ -130,7 +174,11 @@ def synthesize_report(req: SynthesizeRequest):
     if len(req.node_ids) > 30:
         raise HTTPException(status_code=400, detail="Too many nodes (max 30)")
 
-    subgraph = get_subgraph_for_synthesis(req.node_ids)
+    try:
+        subgraph = get_subgraph_for_synthesis(req.node_ids)
+    except (ServiceUnavailable, SessionExpired, OSError) as e:
+        logger.warning("Neo4j unavailable for synthesize_report: %s", e)
+        raise HTTPException(status_code=503, detail="Knowledge graph is temporarily unavailable. Please retry in a moment.")
     if not subgraph["papers"]:
         raise HTTPException(status_code=404, detail="No papers found for selected nodes")
 
@@ -150,7 +198,11 @@ def synthesize_publication(req: SynthesizeRequest):
     if len(req.node_ids) > 30:
         raise HTTPException(status_code=400, detail="Too many nodes (max 30)")
 
-    subgraph = get_subgraph_for_synthesis(req.node_ids)
+    try:
+        subgraph = get_subgraph_for_synthesis(req.node_ids)
+    except (ServiceUnavailable, SessionExpired, OSError) as e:
+        logger.warning("Neo4j unavailable for synthesize_publication: %s", e)
+        raise HTTPException(status_code=503, detail="Knowledge graph is temporarily unavailable. Please retry in a moment.")
     if not subgraph["papers"]:
         raise HTTPException(status_code=404, detail="No papers found for selected nodes")
 

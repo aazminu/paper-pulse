@@ -44,7 +44,7 @@ TEXT_TYPES = {
     "application/json", "application/xml",
 }
 
-MAX_FILE_SIZE = 25 * 1024 * 1024  # 25 MB
+MAX_FILE_SIZE = 25 * 1024 * 1024
 
 
 def get_file_category(content_type: str) -> str:

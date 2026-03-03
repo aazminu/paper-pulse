@@ -26,7 +26,7 @@ logger = logging.getLogger("pubmed")
 
 NCBI_API_KEY = os.getenv("NCBI_API_KEY", "")
 NCBI_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
-NCBI_RATE_LIMIT = 0.35 if NCBI_API_KEY else 1.0  # seconds between requests
+NCBI_RATE_LIMIT = 0.35 if NCBI_API_KEY else 1.0
 
 DOMAIN_TO_MESH = {
     "q-bio": ["Computational Biology", "Quantitative Biology"],
