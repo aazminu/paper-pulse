@@ -479,14 +479,14 @@ export default function GraphPage() {
 				});
 				if (!res.ok) {
 					setSynthesisReport(
-						"Error starting agent traversal. Please try again.",
+						"Something went wrong starting the deep analysis. Please try again.",
 					);
 					setSynthesizing(false);
 					return;
 				}
 				const reader = res.body?.getReader();
 				if (!reader) {
-					setSynthesisReport("No response body.");
+					setSynthesisReport("No response received. Please try again.");
 					setSynthesizing(false);
 					return;
 				}
@@ -703,13 +703,13 @@ export default function GraphPage() {
 							body: JSON.stringify({ node_ids: cluster.paper_ids }),
 						});
 						if (!res.ok) {
-							setSynthesisReport("Error starting agent traversal.");
+							setSynthesisReport("Something went wrong starting the deep analysis. Please try again.");
 							setSynthesizing(false);
 							return;
 						}
 						const reader = res.body?.getReader();
 						if (!reader) {
-							setSynthesisReport("No response body.");
+							setSynthesisReport("No response received. Please try again.");
 							setSynthesizing(false);
 							return;
 						}
@@ -1127,10 +1127,10 @@ export default function GraphPage() {
 								</div>
 							)}
 
-							{/* Filter Nodes */}
+							{/* Show / Hide */}
 							<div>
 								<h3 className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-2">
-									Filter Nodes
+									Show / Hide
 								</h3>
 								<div className="space-y-0.5">
 									{[
@@ -1181,16 +1181,16 @@ export default function GraphPage() {
 								</div>
 							</div>
 
-							{/* Filter Edges */}
+							{/* Connections */}
 							<div>
 								<h3 className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 mb-2">
-									Filter Edges
+									Connections
 								</h3>
 								<div className="space-y-0.5">
 									{[
 										{ type: "cites", label: "Citations", arrow: true },
 										{ type: "authored", label: "Authorships" },
-										{ type: "involves", label: "Concept links" },
+										{ type: "involves", label: "Topics" },
 									].map(({ type, label, arrow }) => {
 										const hidden = hiddenEdgeTypes.has(type);
 										return (
@@ -1234,7 +1234,7 @@ export default function GraphPage() {
 								>
 									<h3 className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 flex items-center gap-1.5">
 										<Layers className="h-3 w-3" />
-										Clusters {clusters.length > 0 && `(${clusters.length})`}
+										Research Groups {clusters.length > 0 && `(${clusters.length})`}
 									</h3>
 									<ChevronDown
 										className={`h-3 w-3 text-zinc-400 transition-transform ${clustersExpanded ? "" : "-rotate-90"}`}
@@ -1245,11 +1245,11 @@ export default function GraphPage() {
 										{clustersLoading ? (
 											<div className="flex items-center gap-2 py-2 text-zinc-400 text-xs">
 												<Loader2 className="h-3 w-3 animate-spin" />
-												Detecting clusters…
+												Finding related paper groups…
 											</div>
 										) : clusters.length === 0 ? (
 											<p className="text-[10px] text-zinc-400 py-1">
-												No clusters found
+												No paper groups found
 											</p>
 										) : (
 											clusters.map((cluster) => (
@@ -1291,7 +1291,7 @@ export default function GraphPage() {
 														onClick={() => handleSynthesizeCluster(cluster)}
 													>
 														<Sparkles className="h-3 w-3" />
-														Synthesize Cluster
+														Summarize Group
 													</Button>
 												</div>
 											))
@@ -1426,7 +1426,7 @@ export default function GraphPage() {
 							)}
 						</button>
 
-						{/* Synthesize mode toggle */}
+						{/* Review mode toggle */}
 						<button
 							onClick={toggleSelectMode}
 							className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border shadow-sm text-xs font-medium transition ${
@@ -1435,11 +1435,11 @@ export default function GraphPage() {
 									: "bg-white dark:bg-zinc-900 hover:bg-zinc-50 dark:hover:bg-zinc-800 border-zinc-200 dark:border-zinc-700"
 							}`}
 							title={
-								selectMode ? "Exit select mode" : "Select papers to synthesize"
+								selectMode ? "Done selecting" : "Select papers to generate a review"
 							}
 						>
 							<MousePointerClick className="h-3.5 w-3.5" />
-							{selectMode ? "Selecting…" : "Synthesize"}
+							{selectMode ? "Selecting…" : "Generate Review"}
 						</button>
 
 						<div className="bg-white dark:bg-zinc-900 rounded-lg border shadow-sm flex items-center">
@@ -1489,8 +1489,8 @@ export default function GraphPage() {
 								<Network className="h-12 w-12 text-zinc-300 mx-auto" />
 								<h3 className="text-lg font-medium">No graph data yet</h3>
 								<p className="text-sm text-zinc-500 max-w-md">
-									The knowledge graph populates after the pipeline runs. You can
-									also trigger it manually via the API.
+									Your knowledge graph will appear here once papers are
+									fetched. Check your feed to get started.
 								</p>
 							</div>
 						</div>
@@ -1623,15 +1623,15 @@ export default function GraphPage() {
 										<button
 											onClick={() => setReportMode("publication")}
 											className={`flex items-center gap-1 px-2.5 py-1.5 transition ${reportMode === "publication" ? "bg-amber-500 text-white" : "hover:bg-zinc-100 dark:hover:bg-zinc-800"}`}
-											title="Publication-ready multi-section review with BibTeX"
+											title="Detailed academic review with citations, ready for papers"
 										>
 											<GraduationCap className="h-3 w-3" />
-											Publication
+											Academic
 										</button>
 										<button
 											onClick={() => setReportMode("agent")}
 											className={`flex items-center gap-1 px-2.5 py-1.5 transition ${reportMode === "agent" ? "bg-violet-500 text-white" : "hover:bg-zinc-100 dark:hover:bg-zinc-800"}`}
-											title="Agent explores graph autonomously, then synthesizes"
+											title="AI explores connections across papers for an in-depth review"
 										>
 											<Brain className="h-3 w-3" />
 											Deep
@@ -1649,7 +1649,7 @@ export default function GraphPage() {
 										) : (
 											<FileText className="h-3.5 w-3.5" />
 										)}
-										Synthesize
+										Generate
 									</Button>
 								</>
 							)}
@@ -1657,7 +1657,7 @@ export default function GraphPage() {
 							<button
 								onClick={toggleSelectMode}
 								className="p-1 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
-								title="Exit select mode"
+								title="Cancel selection"
 							>
 								<X className="h-4 w-4 text-zinc-400" />
 							</button>
@@ -2084,13 +2084,13 @@ export default function GraphPage() {
 											{reportMode === "agent"
 												? "Deep Analysis"
 												: reportMode === "publication"
-													? "Publication Review"
+													? "Academic Review"
 													: "Literature Review"}
 										</h2>
 										<p className="text-xs text-zinc-500">
 											{selectedForSynthesis.size} papers analyzed
-											{reportMode === "agent" && " · agent traversal"}
-											{reportMode === "publication" && " · publication-ready"}
+											{reportMode === "agent" && " · AI-powered deep exploration"}
+											{reportMode === "publication" && " · citation-ready"}
 										</p>
 									</div>
 								</div>
@@ -2213,7 +2213,7 @@ export default function GraphPage() {
 												<div className="flex items-center gap-3 text-violet-600 dark:text-violet-400">
 													<Brain className="h-5 w-5 animate-pulse" />
 													<p className="text-sm font-semibold">
-														Agent is exploring the knowledge graph…
+														AI is analyzing connections between papers…
 													</p>
 												</div>
 
@@ -2240,7 +2240,7 @@ export default function GraphPage() {
 												{agentThought && (
 													<div className="border rounded-lg p-3 bg-violet-50 dark:bg-violet-950 text-xs text-violet-700 dark:text-violet-300 italic">
 														<p className="font-semibold text-[10px] uppercase tracking-widest text-violet-500 mb-1">
-															Agent reasoning
+															AI thinking
 														</p>
 														{agentThought.slice(0, 200)}
 														{agentThought.length > 200 ? "…" : ""}
@@ -2278,7 +2278,7 @@ export default function GraphPage() {
 														<div className="flex items-center gap-2 mb-3">
 															<Loader2 className="h-4 w-4 animate-spin text-violet-500" />
 															<p className="text-xs font-semibold text-zinc-500">
-																Writing synthesis…
+																Writing review…
 															</p>
 														</div>
 														<article className="prose prose-zinc dark:prose-invert prose-sm max-w-none prose-headings:text-base prose-headings:font-semibold prose-p:leading-relaxed prose-li:leading-relaxed prose-pre:bg-transparent prose-pre:p-0">
@@ -2382,8 +2382,8 @@ export default function GraphPage() {
 													<Loader2 className="h-5 w-5 animate-spin text-amber-500" />
 													<p className="text-sm font-medium">
 														{reportMode === "publication"
-															? "Generating publication-ready review (this may take a moment)…"
-															: "Analyzing papers and generating review…"}
+															? "Generating a detailed academic review — this may take a moment…"
+															: "Reading your papers and writing a review…"}
 													</p>
 												</div>
 												{/* Skeleton shimmer */}
@@ -2409,7 +2409,7 @@ export default function GraphPage() {
 														<div className="flex items-center gap-2 text-xs text-violet-600 dark:text-violet-400">
 															<Brain className="h-3.5 w-3.5" />
 															<span className="font-semibold">
-																Agent explored{" "}
+																AI explored{" "}
 																{
 																	agentSteps.filter(
 																		(s) =>
@@ -2426,7 +2426,7 @@ export default function GraphPage() {
 														{agentFindings.length > 0 && (
 															<details className="border rounded-lg bg-zinc-50 dark:bg-zinc-900 text-xs">
 																<summary className="px-3 py-2 cursor-pointer font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition">
-																	View agent discoveries
+																	View key findings
 																</summary>
 																<div className="px-3 pb-3 space-y-1.5">
 																	{agentFindings.map((f, i) => (
