@@ -60,9 +60,7 @@ export default function Home() {
 				<div className="flex items-center gap-3">
 					{mounted && (
 						<button
-							onClick={() =>
-								setTheme(theme === "dark" ? "light" : "dark")
-							}
+							onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
 							className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
 							title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
 						>

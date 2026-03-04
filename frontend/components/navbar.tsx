@@ -42,7 +42,8 @@ export default function Navbar({ rightContent, leftContent }: NavbarProps) {
 				{/* Desktop nav */}
 				<nav className="hidden sm:flex items-center gap-1 ml-1">
 					{NAV_LINKS.map((link) => {
-						const isActive = pathname === link.href || pathname.startsWith(link.href + "/");
+						const isActive =
+							pathname === link.href || pathname.startsWith(link.href + "/");
 						return (
 							<Link
 								key={link.href}
@@ -99,7 +100,8 @@ export default function Navbar({ rightContent, leftContent }: NavbarProps) {
 				<div className="absolute top-full left-0 right-0 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-lg sm:hidden z-50">
 					<nav className="flex flex-col p-2">
 						{NAV_LINKS.map((link) => {
-							const isActive = pathname === link.href || pathname.startsWith(link.href + "/");
+							const isActive =
+								pathname === link.href || pathname.startsWith(link.href + "/");
 							return (
 								<Link
 									key={link.href}

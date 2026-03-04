@@ -26,9 +26,33 @@ function LogoIcon({ className = "h-7 w-7" }: { className?: string }) {
 				className="fill-indigo-600 dark:fill-indigo-500"
 			/>
 			{/* Document lines */}
-			<rect x="9" y="8" width="14" height="2" rx="1" fill="white" opacity="0.9" />
-			<rect x="9" y="13" width="10" height="2" rx="1" fill="white" opacity="0.6" />
-			<rect x="9" y="18" width="12" height="2" rx="1" fill="white" opacity="0.6" />
+			<rect
+				x="9"
+				y="8"
+				width="14"
+				height="2"
+				rx="1"
+				fill="white"
+				opacity="0.9"
+			/>
+			<rect
+				x="9"
+				y="13"
+				width="10"
+				height="2"
+				rx="1"
+				fill="white"
+				opacity="0.6"
+			/>
+			<rect
+				x="9"
+				y="18"
+				width="12"
+				height="2"
+				rx="1"
+				fill="white"
+				opacity="0.6"
+			/>
 			{/* Pulse line */}
 			<path
 				d="M9 25 L13 25 L15 21 L17 27 L19 23 L21 25 L23 25"
@@ -58,9 +82,7 @@ export default function Logo({
 	const s = sizeClasses[size];
 
 	const content = (
-		<span
-			className={`inline-flex items-center gap-2 select-none ${className}`}
-		>
+		<span className={`inline-flex items-center gap-2 select-none ${className}`}>
 			<LogoIcon className={s.icon} />
 			{showText && (
 				<span

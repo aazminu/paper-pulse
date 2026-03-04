@@ -130,7 +130,9 @@
 	html:not(.no-transitions) header,
 	html:not(.no-transitions) main,
 	html:not(.no-transitions) nav {
-		transition: background-color 0.2s ease, color 0.2s ease,
+		transition:
+			background-color 0.2s ease,
+			color 0.2s ease,
 			border-color 0.2s ease;
 	}
 }
