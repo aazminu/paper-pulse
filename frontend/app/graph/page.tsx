@@ -188,30 +188,7 @@ function GraphPageContent() {
 	const graphRef = useRef<any>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const deepLinkHandled = useRef(false);
-
-	const centerOnNode = useCallback((nodeId: string, zoomLevel = 4) => {
-		let attempts = 0;
-		const maxAttempts = 60;
-		const poll = () => {
-			attempts++;
-			const fg = graphRef.current;
-			if (!fg) {
-				if (attempts < maxAttempts) setTimeout(poll, 100);
-				return;
-			}
-			const liveNodes = fg.graphData()?.nodes as GraphNode[] | undefined;
-			const node = liveNodes?.find((n: GraphNode) => n.id === nodeId);
-			if (node && Number.isFinite(node.x) && Number.isFinite(node.y)) {
-				requestAnimationFrame(() => {
-					fg.centerAt(node.x!, node.y!, 800);
-					fg.zoom(zoomLevel, 800);
-				});
-			} else if (attempts < maxAttempts) {
-				setTimeout(poll, 100);
-			}
-		};
-		setTimeout(poll, 300);
-	}, []);
+	const pendingFocusNode = useRef<{ id: string; zoom: number } | null>(null);
 
 	/* State */
 	const [graphData, setGraphData] = useState<GraphData>({
@@ -410,7 +387,7 @@ function GraphPageContent() {
 		if (node) {
 			setSelectedNode(node);
 			fetchNodeDetails(node);
-			centerOnNode(paperId, 4);
+			pendingFocusNode.current = { id: paperId, zoom: 4 };
 		} else {
 			(async () => {
 				const addFallbackNode = () => {
@@ -425,7 +402,7 @@ function GraphPageContent() {
 					});
 					setSelectedNode(fallbackNode);
 					fetchNodeDetails(fallbackNode);
-					centerOnNode(paperId, 3);
+					pendingFocusNode.current = { id: paperId, zoom: 3 };
 				};
 
 				try {
@@ -454,7 +431,7 @@ function GraphPageContent() {
 						};
 						setSelectedNode(paperNode);
 						fetchNodeDetails(paperNode);
-						centerOnNode(paperId, 3);
+						pendingFocusNode.current = { id: paperId, zoom: 3 };
 					} else {
 						addFallbackNode();
 					}
@@ -463,7 +440,7 @@ function GraphPageContent() {
 				}
 			})();
 		}
-	}, [loading, searchParams, graphData.nodes, fetchNodeDetails, centerOnNode]);
+	}, [loading, searchParams, graphData.nodes, fetchNodeDetails]);
 
 	/* Highlight neighbors on hover */
 	const getNeighborIds = useCallback(
@@ -1634,6 +1611,25 @@ function GraphPageContent() {
 							cooldownTicks={150}
 							d3AlphaDecay={0.015}
 							d3VelocityDecay={0.25}
+							onEngineStop={() => {
+								const pending = pendingFocusNode.current;
+								if (!pending || !graphRef.current) return;
+								pendingFocusNode.current = null;
+								const liveNodes = graphRef.current.graphData()?.nodes as
+									| GraphNode[]
+									| undefined;
+								const node = liveNodes?.find(
+									(n: GraphNode) => n.id === pending.id,
+								);
+								if (
+									node &&
+									Number.isFinite(node.x) &&
+									Number.isFinite(node.y)
+								) {
+									graphRef.current.centerAt(node.x!, node.y!, 800);
+									graphRef.current.zoom(pending.zoom, 800);
+								}
+							}}
 							backgroundColor="transparent"
 							enableNodeDrag={true}
 						/>
