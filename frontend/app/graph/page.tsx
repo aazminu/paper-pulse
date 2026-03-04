@@ -189,38 +189,29 @@ function GraphPageContent() {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const deepLinkHandled = useRef(false);
 
-	/** Poll until a node has coordinates from the force simulation, then center on it */
-	const centerOnNode = useCallback(
-		(nodeId: string, zoomLevel = 4, maxAttempts = 30) => {
-			let attempts = 0;
-			const tryCenter = () => {
-				attempts++;
-				if (!graphRef.current) {
-					if (attempts < maxAttempts) requestAnimationFrame(tryCenter);
-					return;
-				}
-				// Look up the live node object from the graph engine
-				const liveNodes = graphRef.current.graphData()?.nodes as
-					| GraphNode[]
-					| undefined;
-				const node = liveNodes?.find((n: GraphNode) => n.id === nodeId);
-				if (
-					node &&
-					typeof node.x === "number" &&
-					typeof node.y === "number" &&
-					(node.x !== 0 || node.y !== 0)
-				) {
-					graphRef.current.centerAt(node.x, node.y, 800);
-					graphRef.current.zoom(zoomLevel, 800);
-				} else if (attempts < maxAttempts) {
-					setTimeout(tryCenter, 100);
-				}
-			};
-			// Give the simulation a moment to start
-			setTimeout(tryCenter, 200);
-		},
-		[],
-	);
+	const centerOnNode = useCallback((nodeId: string, zoomLevel = 4) => {
+		let attempts = 0;
+		const maxAttempts = 60;
+		const poll = () => {
+			attempts++;
+			const fg = graphRef.current;
+			if (!fg) {
+				if (attempts < maxAttempts) setTimeout(poll, 100);
+				return;
+			}
+			const liveNodes = fg.graphData()?.nodes as GraphNode[] | undefined;
+			const node = liveNodes?.find((n: GraphNode) => n.id === nodeId);
+			if (node && Number.isFinite(node.x) && Number.isFinite(node.y)) {
+				requestAnimationFrame(() => {
+					fg.centerAt(node.x!, node.y!, 800);
+					fg.zoom(zoomLevel, 800);
+				});
+			} else if (attempts < maxAttempts) {
+				setTimeout(poll, 100);
+			}
+		};
+		setTimeout(poll, 300);
+	}, []);
 
 	/* State */
 	const [graphData, setGraphData] = useState<GraphData>({
@@ -976,7 +967,6 @@ function GraphPageContent() {
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		(node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
 			const n = node as GraphNode;
-			// Skip rendering if coordinates are not yet finite (early simulation ticks)
 			if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return;
 
 			const isSelected = selectedNode?.id === n.id;
