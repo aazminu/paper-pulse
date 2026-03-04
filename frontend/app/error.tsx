@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
+import Logo from "@/components/logo";
 
 export default function Error({
 	error,
@@ -15,9 +16,10 @@ export default function Error({
 	}, [error]);
 
 	return (
-		<div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 dark:bg-black px-4">
+		<div className="flex min-h-screen flex-col items-center justify-center bg-white dark:bg-zinc-950 px-4">
 			<div className="flex flex-col items-center gap-6 text-center max-w-md">
-				<div className="flex items-center justify-center h-20 w-20 rounded-full bg-red-50 dark:bg-red-950/30">
+				<Logo size="md" href="/" />
+				<div className="flex items-center justify-center h-20 w-20 rounded-2xl bg-red-50 dark:bg-red-950/30">
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						viewBox="0 0 24 24"
@@ -34,7 +36,7 @@ export default function Error({
 					</svg>
 				</div>
 				<div className="space-y-2">
-					<h1 className="text-2xl font-semibold tracking-tight text-black dark:text-zinc-50">
+					<h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
 						Something went wrong
 					</h1>
 					<p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">
@@ -45,13 +47,13 @@ export default function Error({
 				<div className="flex gap-3">
 					<button
 						onClick={reset}
-						className="inline-flex h-10 items-center justify-center rounded-full border border-zinc-200 dark:border-zinc-800 px-6 text-sm font-medium text-black dark:text-white transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-900"
+						className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-200 dark:border-zinc-800 px-6 text-sm font-medium text-zinc-700 dark:text-zinc-300 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900"
 					>
 						Try Again
 					</button>
 					<Link
 						href="/"
-						className="inline-flex h-10 items-center justify-center rounded-full bg-black px-6 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200"
+						className="inline-flex h-10 items-center justify-center rounded-lg bg-indigo-600 px-6 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
 					>
 						Back to Home
 					</Link>

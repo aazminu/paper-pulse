@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import Logo from "@/components/logo";
 
 const AVAILABLE_DOMAINS = [
 	{ id: "cs", label: "Computer Science", category: "Core Sciences" },
@@ -144,8 +145,11 @@ export default function OnboardingPage() {
 	if (isRedirecting) return <PageLoader message="Setting up your feed..." />;
 
 	return (
-		<div className="min-h-screen flex items-center justify-center bg-zinc-50 dark:bg-black p-4">
-			<Card className="w-full max-w-lg">
+		<div className="min-h-screen flex flex-col items-center justify-center bg-white dark:bg-zinc-950 p-4">
+			<div className="mb-6">
+				<Logo size="lg" href="/" />
+			</div>
+			<Card className="w-full max-w-lg border-zinc-200 dark:border-zinc-800 shadow-sm">
 				<CardHeader>
 					<CardTitle className="text-2xl">Welcome to PaperPulse</CardTitle>
 					<CardDescription>
@@ -213,7 +217,7 @@ export default function OnboardingPage() {
 
 						<Button
 							type="submit"
-							className="w-full"
+							className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
 							disabled={selectedDomains.length === 0 || isSubmitting}
 						>
 							{isSubmitting ? "Generating Profile..." : "Complete Setup"}

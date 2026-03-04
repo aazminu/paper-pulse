@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
-import UserMenu from "@/components/user-menu";
+import Navbar from "@/components/navbar";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authFetch } from "@/lib/api";
@@ -134,37 +134,8 @@ export default function SavedPage() {
 	}
 
 	return (
-		<div className="min-h-screen bg-zinc-50 dark:bg-black">
-			{/* Navigation Bar */}
-			<header className="border-b bg-white dark:bg-zinc-950 px-6 py-4 flex justify-between items-center sticky top-0 z-10">
-				<div className="flex items-center gap-6">
-					<h1 className="text-xl font-bold tracking-tight">PaperPulse</h1>
-					<nav className="hidden sm:flex gap-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">
-						<Link
-							href="/feed"
-							className="hover:text-black dark:hover:text-white transition"
-						>
-							Daily Feed
-						</Link>
-						<Link href="/saved" className="text-black dark:text-white">
-							Saved
-						</Link>
-						<Link
-							href="/ask"
-							className="hover:text-black dark:hover:text-white transition"
-						>
-							Ask AI
-						</Link>
-						<Link
-							href="/graph"
-							className="hover:text-black dark:hover:text-white transition"
-						>
-							Graph
-						</Link>
-					</nav>
-				</div>
-				<UserMenu />
-			</header>
+		<div className="min-h-screen bg-zinc-50/50 dark:bg-zinc-950">
+			<Navbar />
 
 			<main className="max-w-4xl mx-auto py-8 px-4 sm:px-6">
 				<div className="mb-8 flex flex-col sm:flex-row sm:items-end gap-4 justify-between">

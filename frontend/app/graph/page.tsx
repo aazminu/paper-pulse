@@ -9,8 +9,7 @@ import {
 	Suspense,
 } from "react";
 import { useAuth } from "@/components/auth-provider";
-import UserMenu from "@/components/user-menu";
-import Link from "next/link";
+import Navbar from "@/components/navbar";
 import { useRouter, useSearchParams } from "next/navigation";
 import { authFetch } from "@/lib/api";
 import { PageLoader, RedirectLoader } from "@/components/page-loader";
@@ -1074,39 +1073,12 @@ function GraphPageContent() {
 		TYPE_ICONS[type as keyof typeof TYPE_ICONS] || BookOpen;
 
 	return (
-		<div className="flex flex-col bg-zinc-50 dark:bg-black h-screen w-full overflow-hidden">
+		<div className="flex flex-col bg-zinc-50/50 dark:bg-zinc-950 h-screen w-full overflow-hidden">
 			{/* Header */}
-			<header className="border-b bg-white dark:bg-zinc-950 px-4 sm:px-6 py-3 flex justify-between items-center shrink-0 z-40">
-				<div className="flex items-center gap-4 sm:gap-6">
-					<h1 className="text-xl font-bold tracking-tight">PaperPulse</h1>
-					<nav className="hidden sm:flex gap-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">
-						<Link
-							href="/feed"
-							className="hover:text-black dark:hover:text-white transition"
-						>
-							Daily Feed
-						</Link>
-						<Link
-							href="/saved"
-							className="hover:text-black dark:hover:text-white transition"
-						>
-							Saved
-						</Link>
-						<Link
-							href="/ask"
-							className="hover:text-black dark:hover:text-white transition"
-						>
-							Ask AI
-						</Link>
-						<Link href="/graph" className="text-black dark:text-white">
-							Graph
-						</Link>
-					</nav>
-				</div>
-				<div className="flex items-center gap-3">
-					{/* Search */}
+			<Navbar
+				rightContent={
 					<div className="relative">
-						<div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-900 rounded-lg px-3 py-1.5 border border-transparent focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition">
+						<div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-900 rounded-lg px-3 py-1.5 border border-transparent focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 transition">
 							<Search className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
 							<input
 								ref={searchInputRef}
@@ -1129,7 +1101,7 @@ function GraphPageContent() {
 						</div>
 						{/* Search dropdown */}
 						{searchOpen && searchResults.length > 0 && (
-							<div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-zinc-900 border rounded-lg shadow-xl overflow-hidden z-50 max-h-72 overflow-y-auto">
+							<div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg shadow-xl overflow-hidden z-50 max-h-72 overflow-y-auto">
 								{searchResults.map((r) => {
 									const Icon = TypeIcon(r.type);
 									return (
@@ -1162,9 +1134,8 @@ function GraphPageContent() {
 							</div>
 						)}
 					</div>
-					<UserMenu />
-				</div>
-			</header>
+				}
+			/>
 
 			{/* Body */}
 			<div className="flex flex-1 min-h-0 overflow-hidden">

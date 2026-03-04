@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useAuth } from "@/components/auth-provider";
-import UserMenu from "@/components/user-menu";
-import Link from "next/link";
+import Navbar from "@/components/navbar";
+
 import { useRouter } from "next/navigation";
 import { authFetch } from "@/lib/api";
 import { PageLoader, RedirectLoader } from "@/components/page-loader";
@@ -233,36 +233,8 @@ export default function FeedPage() {
 	}
 
 	return (
-		<div className="min-h-screen bg-zinc-50 dark:bg-black">
-			<header className="border-b bg-white dark:bg-zinc-950 px-6 py-4 flex justify-between items-center sticky top-0 z-10">
-				<div className="flex items-center gap-6">
-					<h1 className="text-xl font-bold tracking-tight">PaperPulse</h1>
-					<nav className="hidden sm:flex gap-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">
-						<Link href="/feed" className="text-black dark:text-white">
-							Daily Feed
-						</Link>
-						<Link
-							href="/saved"
-							className="hover:text-black dark:hover:text-white transition"
-						>
-							Saved
-						</Link>
-						<Link
-							href="/ask"
-							className="hover:text-black dark:hover:text-white transition"
-						>
-							Ask AI
-						</Link>
-						<Link
-							href="/graph"
-							className="hover:text-black dark:hover:text-white transition"
-						>
-							Graph
-						</Link>
-					</nav>
-				</div>
-				<UserMenu />
-			</header>
+		<div className="min-h-screen bg-zinc-50/50 dark:bg-zinc-950">
+			<Navbar />
 
 			<div className="max-w-6xl mx-auto flex gap-12 py-8 px-4 sm:px-6">
 				{/* Main content */}

@@ -2,8 +2,8 @@
 
 import { useState, useRef, useCallback, useEffect, Suspense } from "react";
 import { useAuth } from "@/components/auth-provider";
-import UserMenu from "@/components/user-menu";
-import Link from "next/link";
+import Navbar from "@/components/navbar";
+
 import { useSearchParams, useRouter } from "next/navigation";
 import { authFetch } from "@/lib/api";
 import { PageLoader, RedirectLoader } from "@/components/page-loader";
@@ -1532,7 +1532,7 @@ function AskPageContent() {
 
 	return (
 		<div
-			className="fixed inset-0 flex flex-col overflow-hidden bg-zinc-50 dark:bg-black"
+			className="fixed inset-0 flex flex-col overflow-hidden bg-white dark:bg-zinc-950"
 			onDragOver={handleDragOver}
 			onDragLeave={handleDragLeave}
 			onDrop={handleDrop}
@@ -1552,46 +1552,21 @@ function AskPageContent() {
 			)}
 
 			{/* Navigation Header */}
-			<header className="border-b bg-white dark:bg-zinc-950 px-4 sm:px-6 py-4 flex justify-between items-center sticky top-0 z-10 shrink-0">
-				<div className="flex items-center gap-3 sm:gap-6">
+			<Navbar
+				leftContent={
 					<button
 						onClick={() => setSidebarOpen((o) => !o)}
-						className="text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition"
+						className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
 						title={sidebarOpen ? "Close sidebar" : "Open sidebar"}
 					>
 						{sidebarOpen ? (
-							<PanelLeftClose className="h-5 w-5" />
+							<PanelLeftClose className="h-4 w-4" />
 						) : (
-							<PanelLeft className="h-5 w-5" />
+							<PanelLeft className="h-4 w-4" />
 						)}
 					</button>
-					<h1 className="text-xl font-bold tracking-tight">PaperPulse</h1>
-					<nav className="hidden sm:flex gap-4 text-sm font-medium text-zinc-600 dark:text-zinc-400">
-						<Link
-							href="/feed"
-							className="hover:text-black dark:hover:text-white transition"
-						>
-							Daily Feed
-						</Link>
-						<Link
-							href="/saved"
-							className="hover:text-black dark:hover:text-white transition"
-						>
-							Saved
-						</Link>
-						<Link href="/ask" className="text-black dark:text-white">
-							Ask AI
-						</Link>
-						<Link
-							href="/graph"
-							className="hover:text-black dark:hover:text-white transition"
-						>
-							Graph
-						</Link>
-					</nav>
-				</div>
-				<UserMenu />
-			</header>
+				}
+			/>
 
 			{/* Body: sidebar + chat */}
 			<div className="flex grow min-h-0 overflow-hidden">
@@ -1959,7 +1934,7 @@ function AskPageContent() {
 							</div>
 
 							{/* Input area */}
-							<div className="shrink-0 border-t bg-zinc-50 dark:bg-black p-4">
+							<div className="shrink-0 border-t border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4">
 								<div className="max-w-4xl mx-auto">
 									<InputBar
 										query={query}
