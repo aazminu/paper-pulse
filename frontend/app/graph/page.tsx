@@ -976,6 +976,9 @@ function GraphPageContent() {
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		(node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
 			const n = node as GraphNode;
+			// Skip rendering if coordinates are not yet finite (early simulation ticks)
+			if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return;
+
 			const isSelected = selectedNode?.id === n.id;
 			const isHovered = hoveredNode === n.id;
 			const isClusterDimmed = highlightCluster && !highlightCluster.has(n.id);
@@ -1594,6 +1597,8 @@ function GraphPageContent() {
 								color: string,
 								ctx: CanvasRenderingContext2D,
 							) => {
+								if (!Number.isFinite(node.x) || !Number.isFinite(node.y))
+									return;
 								const size = (node as GraphNode).type === "paper" ? 8 : 6;
 								ctx.beginPath();
 								ctx.arc(node.x!, node.y!, size, 0, 2 * Math.PI);
