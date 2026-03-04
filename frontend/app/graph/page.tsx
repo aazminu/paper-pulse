@@ -471,27 +471,11 @@ function GraphPageContent() {
 					);
 					if (match) {
 						handleSearchSelect(match);
-						return;
 					}
 				}
 			} catch {}
-			const node = graphData.nodes.find(
-				(n) => n.id === paperId && n.type === "paper",
-			);
-			if (node) {
-				handleNodeClick(node);
-			} else {
-				fetchNodeDetails({ id: paperId, label: paperId, type: "paper" });
-			}
 		})();
-	}, [
-		loading,
-		searchParams,
-		graphData.nodes,
-		fetchNodeDetails,
-		handleSearchSelect,
-		handleNodeClick,
-	]);
+	}, [loading, searchParams, handleSearchSelect]);
 
 	/* Graph controls */
 	const handleZoomIn = () =>
