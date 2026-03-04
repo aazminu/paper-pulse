@@ -188,7 +188,6 @@ function GraphPageContent() {
 	const graphRef = useRef<any>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const deepLinkHandled = useRef(false);
-	const pendingFocusNode = useRef<{ id: string; zoom: number } | null>(null);
 
 	/* State */
 	const [graphData, setGraphData] = useState<GraphData>({
@@ -374,74 +373,6 @@ function GraphPageContent() {
 		setDetailsLoading(false);
 	}, []);
 
-	useEffect(() => {
-		if (loading || deepLinkHandled.current) return;
-		const paperId = searchParams.get("paper");
-		if (!paperId) return;
-		deepLinkHandled.current = true;
-
-		const node = graphData.nodes.find(
-			(n) => n.id === paperId && n.type === "paper",
-		);
-
-		if (node) {
-			setSelectedNode(node);
-			fetchNodeDetails(node);
-			pendingFocusNode.current = { id: paperId, zoom: 4 };
-		} else {
-			(async () => {
-				const addFallbackNode = () => {
-					const fallbackNode: GraphNode = {
-						id: paperId,
-						label: paperId,
-						type: "paper",
-					};
-					setGraphData((prev) => {
-						if (prev.nodes.some((n) => n.id === paperId)) return prev;
-						return { nodes: [...prev.nodes, fallbackNode], edges: prev.edges };
-					});
-					setSelectedNode(fallbackNode);
-					fetchNodeDetails(fallbackNode);
-					pendingFocusNode.current = { id: paperId, zoom: 3 };
-				};
-
-				try {
-					const res = await authFetch(
-						`${API}/graph/paper/${encodeURIComponent(paperId)}`,
-					);
-					if (res.ok) {
-						const data = await res.json();
-						setGraphData((prev) => {
-							const existingIds = new Set(prev.nodes.map((n) => n.id));
-							const newNodes = (data.nodes || []).filter(
-								(n: GraphNode) => !existingIds.has(n.id),
-							);
-							const newEdges = data.edges || [];
-							return {
-								nodes: [...prev.nodes, ...newNodes],
-								edges: [...prev.edges, ...newEdges],
-							};
-						});
-						const paperNode: GraphNode = (data.nodes || []).find(
-							(n: GraphNode) => n.id === paperId && n.type === "paper",
-						) || {
-							id: paperId,
-							label: paperId,
-							type: "paper" as const,
-						};
-						setSelectedNode(paperNode);
-						fetchNodeDetails(paperNode);
-						pendingFocusNode.current = { id: paperId, zoom: 3 };
-					} else {
-						addFallbackNode();
-					}
-				} catch {
-					addFallbackNode();
-				}
-			})();
-		}
-	}, [loading, searchParams, graphData.nodes, fetchNodeDetails]);
-
 	/* Highlight neighbors on hover */
 	const getNeighborIds = useCallback(
 		(nodeId: string): Set<string> => {
@@ -521,6 +452,46 @@ function GraphPageContent() {
 		},
 		[graphData.nodes, handleNodeClick, fetchNodeDetails],
 	);
+
+	useEffect(() => {
+		if (loading || deepLinkHandled.current) return;
+		const paperId = searchParams.get("paper");
+		if (!paperId) return;
+		deepLinkHandled.current = true;
+
+		(async () => {
+			try {
+				const res = await authFetch(
+					`${API}/graph/search?q=${encodeURIComponent(paperId)}&limit=10`,
+				);
+				if (res.ok) {
+					const data = await res.json();
+					const match = (data.results || []).find(
+						(r: SearchResult) => r.id === paperId,
+					);
+					if (match) {
+						handleSearchSelect(match);
+						return;
+					}
+				}
+			} catch {}
+			const node = graphData.nodes.find(
+				(n) => n.id === paperId && n.type === "paper",
+			);
+			if (node) {
+				handleNodeClick(node);
+			} else {
+				fetchNodeDetails({ id: paperId, label: paperId, type: "paper" });
+			}
+		})();
+	}, [
+		loading,
+		searchParams,
+		graphData.nodes,
+		fetchNodeDetails,
+		handleSearchSelect,
+		handleNodeClick,
+	]);
 
 	/* Graph controls */
 	const handleZoomIn = () =>
@@ -1611,25 +1582,6 @@ function GraphPageContent() {
 							cooldownTicks={150}
 							d3AlphaDecay={0.015}
 							d3VelocityDecay={0.25}
-							onEngineStop={() => {
-								const pending = pendingFocusNode.current;
-								if (!pending || !graphRef.current) return;
-								pendingFocusNode.current = null;
-								const liveNodes = graphRef.current.graphData()?.nodes as
-									| GraphNode[]
-									| undefined;
-								const node = liveNodes?.find(
-									(n: GraphNode) => n.id === pending.id,
-								);
-								if (
-									node &&
-									Number.isFinite(node.x) &&
-									Number.isFinite(node.y)
-								) {
-									graphRef.current.centerAt(node.x!, node.y!, 800);
-									graphRef.current.zoom(pending.zoom, 800);
-								}
-							}}
 							backgroundColor="transparent"
 							enableNodeDrag={true}
 						/>
