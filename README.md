@@ -537,6 +537,7 @@ The agent runs with temperature 0.2 for structured tool-calling decisions and sw
 | TypeScript 5                 | Type safety                        |
 | Tailwind CSS 4               | Utility-first styling              |
 | shadcn/ui                    | Reusable UI components             |
+| next-themes                  | Light and dark theme switching     |
 | Supabase Auth                | Authentication and user management |
 | react-force-graph-2d         | Force-directed graph visualization |
 | react-markdown               | Markdown rendering                 |
@@ -836,9 +837,19 @@ erDiagram
 
 ## Frontend Pages
 
+### Branding and Theming
+
+All pages share a consistent indigo-accented brand identity. A custom SVG logo (rounded document with a pulse line) is used as both the in-app logo and the browser favicon. The brand name renders as "Paper" in dark text and "Pulse" in indigo.
+
+The app defaults to a white (light) theme for all users. A dark theme is available through a Sun/Moon toggle button in the navbar and on the landing page header. Theme state is managed by `next-themes` with class-based switching, persisted in localStorage, and applied without a flash of unstyled content. Smooth CSS transitions (0.2s) animate background, text, and border color changes between themes. Custom scrollbar styling adapts to both modes.
+
+### Shared Navbar
+
+All authenticated pages use a shared `Navbar` component that replaces the per-page inline headers. It includes the logo, four navigation links (Feed, Saved, Ask AI, Graph) with active-state highlighting, the theme toggle, and the user avatar menu. On mobile, navigation collapses behind a hamburger menu with an overlay dropdown. The navbar accepts `leftContent` and `rightContent` slots so individual pages can inject page-specific controls: the Ask AI page places its sidebar toggle in `leftContent`, and the Graph page places its search bar in `rightContent`.
+
 ### Landing Page
 
-Centered hero with sign-in and sign-up buttons for unauthenticated users, and a "Go to my Feed" link for signed-in users. Uses Supabase Auth for session detection.
+Hero section with headline, subtitle, and call-to-action buttons. Unauthenticated visitors see "Get Started Free" and "Sign In" buttons; signed-in users see a "Go to my Feed" link. Below the hero, four feature cards in a two-column grid highlight the main capabilities (Daily Research Feed, AI Summaries & Q&A, Knowledge Graph, Literature Synthesis). Source badges at the bottom list the four academic databases.
 
 ### Onboarding
 
@@ -860,17 +871,23 @@ Full chat interface with a sidebar listing all conversations. Features include p
 
 Interactive force-directed graph powered by react-force-graph-2d. Papers are blue, authors are purple, concepts are green, and institutions are amber. Features include node hover highlighting with neighbor emphasis, node and edge type filtering, full-text search, click-to-detail panels, auto-detected cluster visualization with click-to-zoom, three synthesis modes, Mermaid diagram rendering, report saving and loading, PNG export, and a table of contents for long reports.
 
+### Sign-in and Sign-up
+
+Centered forms with the app logo, email/password fields, Google and GitHub OAuth buttons, and cross-page links. The sign-in page greets returning users with "Welcome back" and the sign-up page with "Create your account".
+
 ### Error and Status Pages
 
-**Not Found (404)** — Displays when a user navigates to a route that does not exist. Shows a centered "Page not found" message with a link back to the home page.
+All error pages display the app logo and use indigo-accented primary buttons.
 
-**Error Boundary** — Catches unhandled runtime errors within the app. Shows a "Something went wrong" message with a "Try Again" button that triggers React's error recovery, plus a link back to home.
+**Not Found (404)** displays a centered "Page not found" message with a link back to the home page.
 
-**Unauthorized** — Shown at `/unauthorized` when a user lacks permission. If the user is not signed in, it displays a "Sign In" button; if they are signed in but lack access, it shows a "Go to Feed" link instead.
+**Error Boundary** catches unhandled runtime errors within the app. Shows a "Something went wrong" message with a "Try Again" button that triggers React's error recovery, plus a link back to home.
+
+**Unauthorized** is shown at `/unauthorized` when a user lacks permission. If the user is not signed in, it displays a "Sign In" button; if they are signed in but lack access, it shows a "Go to Feed" link instead.
 
 ### Page Transitions
 
-A shared `PageLoader` component replaces blank screen flashes during auth checks and page transitions. All protected pages show a full-screen spinner while authentication state loads, and a `RedirectLoader` variant handles navigation with a "Redirecting..." message. The onboarding page displays a "Setting up your feed..." loader after successful submission.
+A shared `PageLoader` component replaces blank screen flashes during auth checks and page transitions. All protected pages show a full-screen indigo spinner while authentication state loads, and a `RedirectLoader` variant handles navigation with a "Redirecting..." message. The onboarding page displays a "Setting up your feed..." loader after successful submission.
 
 ---
 
@@ -1014,9 +1031,9 @@ paper-pulse/
         next.config.ts                      Next.js configuration
         proxy.ts                            Supabase session refresh middleware
         app/
-            layout.tsx                      Root layout with Supabase AuthProvider
+            layout.tsx                      Root layout with ThemeProvider and AuthProvider
             page.tsx                        Landing page
-            globals.css                     Global styles
+            globals.css                     Global styles and theme transitions
             auth/
                 callback/route.ts           OAuth callback handler
             error.tsx                       Runtime error boundary
@@ -1033,6 +1050,9 @@ paper-pulse/
             RelatedPapers.tsx               Related paper suggestions
             mermaid-renderer.tsx            Mermaid diagram renderer
             auth-provider.tsx               Supabase Auth context and useAuth hook
+            theme-provider.tsx              next-themes wrapper for light/dark mode
+            navbar.tsx                      Shared navigation bar with theme toggle
+            logo.tsx                        SVG logo icon and brand wordmark
             user-menu.tsx                   User avatar dropdown with sign-out
             page-loader.tsx                 PageLoader, RedirectLoader, and useAuthGuard
             ui/                             shadcn/ui primitives

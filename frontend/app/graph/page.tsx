@@ -189,6 +189,39 @@ function GraphPageContent() {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const deepLinkHandled = useRef(false);
 
+	/** Poll until a node has coordinates from the force simulation, then center on it */
+	const centerOnNode = useCallback(
+		(nodeId: string, zoomLevel = 4, maxAttempts = 30) => {
+			let attempts = 0;
+			const tryCenter = () => {
+				attempts++;
+				if (!graphRef.current) {
+					if (attempts < maxAttempts) requestAnimationFrame(tryCenter);
+					return;
+				}
+				// Look up the live node object from the graph engine
+				const liveNodes = graphRef.current.graphData()?.nodes as
+					| GraphNode[]
+					| undefined;
+				const node = liveNodes?.find((n: GraphNode) => n.id === nodeId);
+				if (
+					node &&
+					typeof node.x === "number" &&
+					typeof node.y === "number" &&
+					(node.x !== 0 || node.y !== 0)
+				) {
+					graphRef.current.centerAt(node.x, node.y, 800);
+					graphRef.current.zoom(zoomLevel, 800);
+				} else if (attempts < maxAttempts) {
+					setTimeout(tryCenter, 100);
+				}
+			};
+			// Give the simulation a moment to start
+			setTimeout(tryCenter, 200);
+		},
+		[],
+	);
+
 	/* State */
 	const [graphData, setGraphData] = useState<GraphData>({
 		nodes: [],
@@ -386,12 +419,7 @@ function GraphPageContent() {
 		if (node) {
 			setSelectedNode(node);
 			fetchNodeDetails(node);
-			setTimeout(() => {
-				if (graphRef.current && node.x !== undefined && node.y !== undefined) {
-					graphRef.current.centerAt(node.x, node.y, 800);
-					graphRef.current.zoom(4, 800);
-				}
-			}, 600);
+			centerOnNode(paperId, 4);
 		} else {
 			(async () => {
 				const addFallbackNode = () => {
@@ -406,12 +434,7 @@ function GraphPageContent() {
 					});
 					setSelectedNode(fallbackNode);
 					fetchNodeDetails(fallbackNode);
-					setTimeout(() => {
-						if (graphRef.current) {
-							graphRef.current.centerAt(0, 0, 800);
-							graphRef.current.zoom(3, 800);
-						}
-					}, 800);
+					centerOnNode(paperId, 3);
 				};
 
 				try {
@@ -440,12 +463,7 @@ function GraphPageContent() {
 						};
 						setSelectedNode(paperNode);
 						fetchNodeDetails(paperNode);
-						setTimeout(() => {
-							if (graphRef.current) {
-								graphRef.current.centerAt(0, 0, 800);
-								graphRef.current.zoom(3, 800);
-							}
-						}, 800);
+						centerOnNode(paperId, 3);
 					} else {
 						addFallbackNode();
 					}
@@ -454,7 +472,7 @@ function GraphPageContent() {
 				}
 			})();
 		}
-	}, [loading, searchParams, graphData.nodes, fetchNodeDetails]);
+	}, [loading, searchParams, graphData.nodes, fetchNodeDetails, centerOnNode]);
 
 	/* Highlight neighbors on hover */
 	const getNeighborIds = useCallback(
