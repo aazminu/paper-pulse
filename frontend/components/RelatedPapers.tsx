@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,7 +26,6 @@ export default function RelatedPapers({
 	arxivId,
 	className = "",
 }: RelatedPapersProps) {
-	const router = useRouter();
 	const [papers, setPapers] = useState<RelatedPaper[]>([]);
 	const [loading, setLoading] = useState(true);
 
@@ -98,11 +96,10 @@ export default function RelatedPapers({
 									variant="ghost"
 									size="sm"
 									className="h-6 px-2 text-[10px] gap-1 text-purple-600 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-950"
-									onClick={() =>
-										router.push(
-											`/ask?paper=${encodeURIComponent(paper.arxiv_id)}`,
-										)
-									}
+									onClick={() => {
+										const url = `/ask?paper=${encodeURIComponent(paper.arxiv_id)}&t=${Date.now()}`;
+										window.location.href = url;
+									}}
 								>
 									<Sparkles className="h-3 w-3" />
 									Explore

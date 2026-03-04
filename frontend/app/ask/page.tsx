@@ -1792,6 +1792,9 @@ function AskPageContent() {
 											(!msg.sources || msg.sources.length === 0)
 										)
 											return null;
+										const isLastAi =
+											msg.role === "ai" && index === messages.length - 1;
+										const hideSourcesWhileStreaming = isLoading && isLastAi;
 										return (
 											<div
 												key={index}
@@ -1855,40 +1858,42 @@ function AskPageContent() {
 														</div>
 													)}
 
-													{msg.sources && msg.sources.length > 0 && (
-														<div className="mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-2">
-															<p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
-																Sources Referenced
-															</p>
-															{msg.sources.map((source, idx) => (
-																<div
-																	key={idx}
-																	className="flex gap-2 items-start bg-zinc-50 dark:bg-zinc-950 p-2 rounded-md border text-xs"
-																>
-																	<BookOpen className="h-4 w-4 text-zinc-400 shrink-0 mt-0.5" />
-																	<div>
-																		<p className="font-medium line-clamp-1">
-																			{source.title}
-																		</p>
-																		<a
-																			href={`https://arxiv.org/abs/${source.arxiv_id}`}
-																			target="_blank"
-																			rel="noopener noreferrer"
-																			className="text-blue-600 hover:underline mt-1 inline-block"
-																		>
-																			arxiv.org/abs/{source.arxiv_id}
-																		</a>
+													{msg.sources &&
+														msg.sources.length > 0 &&
+														!hideSourcesWhileStreaming && (
+															<div className="mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-800 space-y-2">
+																<p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
+																	Sources Referenced
+																</p>
+																{msg.sources.map((source, idx) => (
+																	<div
+																		key={idx}
+																		className="flex gap-2 items-start bg-zinc-50 dark:bg-zinc-950 p-2 rounded-md border text-xs"
+																	>
+																		<BookOpen className="h-4 w-4 text-zinc-400 shrink-0 mt-0.5" />
+																		<div>
+																			<p className="font-medium line-clamp-1">
+																				{source.title}
+																			</p>
+																			<a
+																				href={`https://arxiv.org/abs/${source.arxiv_id}`}
+																				target="_blank"
+																				rel="noopener noreferrer"
+																				className="text-blue-600 hover:underline mt-1 inline-block"
+																			>
+																				arxiv.org/abs/{source.arxiv_id}
+																			</a>
+																		</div>
 																	</div>
-																</div>
-															))}
-															{/* Related papers from knowledge graph */}
-															{msg.sources.length > 0 && (
-																<RelatedPapers
-																	arxivId={msg.sources[0].arxiv_id}
-																/>
-															)}
-														</div>
-													)}
+																))}
+																{/* Related papers from knowledge graph */}
+																{msg.sources.length > 0 && (
+																	<RelatedPapers
+																		arxivId={msg.sources[0].arxiv_id}
+																	/>
+																)}
+															</div>
+														)}
 												</div>
 
 												{msg.role === "user" && (
