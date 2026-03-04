@@ -73,20 +73,43 @@ You sign up, pick your research areas, describe your interests in a sentence or 
 
 ### Video Walkthrough
 
-<!-- VIDEO_PLACEHOLDER: Add a link to your demo video here -->
-<!-- Example: [![PaperPulse Demo](https://img.youtube.com/vi/VIDEO_ID/maxresdefault.jpg)](https://youtu.be/VIDEO_ID) -->
-
-`[Video walkthrough coming soon]`
+https://github.com/user-attachments/assets/210e88fc-17cb-4535-a9b2-9a7fb31ba108
 
 ### Screenshots
 
-| Feed                                                     | Ask AI                                                 | Knowledge Graph                                            |
-| -------------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------- |
-| ![Feed Screenshot](<!-- IMAGE_PLACEHOLDER: feed.png -->) | ![Ask Screenshot](<!-- IMAGE_PLACEHOLDER: ask.png -->) | ![Graph Screenshot](<!-- IMAGE_PLACEHOLDER: graph.png -->) |
+**Feed**
 
-| Onboarding                                                           | Saved Papers                                               | Literature Review                                            |
-| -------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------ |
-| ![Onboarding Screenshot](<!-- IMAGE_PLACEHOLDER: onboarding.png -->) | ![Saved Screenshot](<!-- IMAGE_PLACEHOLDER: saved.png -->) | ![Review Screenshot](<!-- IMAGE_PLACEHOLDER: review.png -->) |
+<img width="1915" height="907" alt="Feed" src="https://github.com/user-attachments/assets/e4e3beeb-0287-45cc-a4a2-029afc537811" />
+
+<br/><br/>
+
+**Ask AI**
+
+<img width="1914" height="908" alt="Ask AI" src="https://github.com/user-attachments/assets/13f69b8a-4715-4395-a595-4a6a71dbdba2" />
+
+<br/><br/>
+
+**Knowledge Graph**
+
+<img width="1912" height="903" alt="Knowledge Graph" src="https://github.com/user-attachments/assets/9b990379-0ce6-455b-93f4-68e779a9a66f" />
+
+<br/><br/>
+
+**Onboarding**
+
+<img width="674" height="882" alt="Onboarding" src="https://github.com/user-attachments/assets/7548583e-429a-4986-92a4-b3281483fbe5" />
+
+<br/><br/>
+
+**Saved Papers**
+
+<img width="1915" height="905" alt="Saved Papers" src="https://github.com/user-attachments/assets/8c23b5a8-cf23-464e-9d5c-e0cd162fe203" />
+
+<br/><br/>
+
+**Literature Review**
+
+<img width="1912" height="909" alt="Literature Review" src="https://github.com/user-attachments/assets/fd0dd702-5c28-4e32-9d76-70638495a283" />
 
 ---
 
