@@ -462,6 +462,17 @@ function GraphPageContent() {
 		const node = graphData.nodes.find((n) => n.id === paperId);
 		if (node) {
 			handleNodeClick(node);
+			const timer = setTimeout(() => {
+				if (
+					graphRef.current &&
+					Number.isFinite(node.x) &&
+					Number.isFinite(node.y)
+				) {
+					graphRef.current.centerAt(node.x, node.y, 800);
+					graphRef.current.zoom(4, 800);
+				}
+			}, 3000);
+			return () => clearTimeout(timer);
 		}
 	}, [loading, searchParams, graphData.nodes, handleNodeClick]);
 
