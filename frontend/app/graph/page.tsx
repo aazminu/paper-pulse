@@ -459,23 +459,11 @@ function GraphPageContent() {
 		if (!paperId) return;
 		deepLinkHandled.current = true;
 
-		(async () => {
-			try {
-				const res = await authFetch(
-					`${API}/graph/search?q=${encodeURIComponent(paperId)}&limit=10`,
-				);
-				if (res.ok) {
-					const data = await res.json();
-					const match = (data.results || []).find(
-						(r: SearchResult) => r.id === paperId,
-					);
-					if (match) {
-						handleSearchSelect(match);
-					}
-				}
-			} catch {}
-		})();
-	}, [loading, searchParams, handleSearchSelect]);
+		const node = graphData.nodes.find((n) => n.id === paperId);
+		if (node) {
+			handleNodeClick(node);
+		}
+	}, [loading, searchParams, graphData.nodes, handleNodeClick]);
 
 	/* Graph controls */
 	const handleZoomIn = () =>
