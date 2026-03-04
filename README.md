@@ -871,6 +871,8 @@ Full chat interface with a sidebar listing all conversations. Features include p
 
 Interactive force-directed graph powered by react-force-graph-2d. Papers are blue, authors are purple, concepts are green, and institutions are amber. Features include node hover highlighting with neighbor emphasis, node and edge type filtering, full-text search, click-to-detail panels, auto-detected cluster visualization with click-to-zoom, three synthesis modes, Mermaid diagram rendering, report saving and loading, PNG export, and a table of contents for long reports.
 
+Deep-linking is supported via the `?paper=<arxiv_id>` query parameter. The "View in Graph" button on feed paper cards navigates to `/graph?paper=<id>`. On arrival the graph loads and the force simulation is allowed to settle before the target node is located, centered, zoomed, and its detail panel opened — preventing the disorienting camera chase that would occur if centering happened while nodes were still moving.
+
 ### Sign-in and Sign-up
 
 Centered forms with the app logo, email/password fields, Google and GitHub OAuth buttons, and cross-page links. The sign-in page greets returning users with "Welcome back" and the sign-up page with "Create your account".

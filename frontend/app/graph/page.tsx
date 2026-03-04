@@ -463,7 +463,7 @@ function GraphPageContent() {
 		if (node) {
 			const timer = setTimeout(() => {
 				handleNodeClick(node);
-			}, 2000);
+			}, 4000);
 			return () => clearTimeout(timer);
 		}
 	}, [loading, searchParams, graphData.nodes, handleNodeClick]);
