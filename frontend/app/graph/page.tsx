@@ -398,6 +398,9 @@ function GraphPageContent() {
 
 	const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const searchInputRef = useRef<HTMLInputElement>(null);
+	const pendingViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(
+		null,
+	);
 	const graphCacheKey = `${GRAPH_CACHE_PREFIX}:v${GRAPH_CACHE_VERSION}:data:${user?.id ?? "anon"}`;
 	const clustersCacheKey = `${GRAPH_CACHE_PREFIX}:v${GRAPH_CACHE_VERSION}:clusters:${user?.id ?? "anon"}`;
 
@@ -458,6 +461,34 @@ function GraphPageContent() {
 		},
 		[clustersCacheKey],
 	);
+
+	const captureViewport = useCallback(() => {
+		if (!graphRef.current || dimensions.width <= 0 || dimensions.height <= 0) {
+			return;
+		}
+
+		try {
+			const center = graphRef.current.screen2GraphCoords(
+				dimensions.width / 2,
+				dimensions.height / 2,
+			);
+			const zoom = graphRef.current.zoom();
+			if (
+				!Number.isFinite(center?.x) ||
+				!Number.isFinite(center?.y) ||
+				!Number.isFinite(zoom)
+			) {
+				return;
+			}
+			pendingViewportRef.current = {
+				x: center.x,
+				y: center.y,
+				zoom,
+			};
+		} catch {
+			/* ignore */
+		}
+	}, [dimensions.width, dimensions.height]);
 
 	/* Resize observer */
 	useEffect(() => {
@@ -1127,24 +1158,27 @@ function GraphPageContent() {
 
 	/* Toggle helpers */
 	const toggleNodeType = useCallback((type: string) => {
+		captureViewport();
 		setHiddenNodeTypes((prev) => {
 			const next = new Set(prev);
 			if (next.has(type)) next.delete(type);
 			else next.add(type);
 			return next;
 		});
-	}, []);
+	}, [captureViewport]);
 
 	const toggleEdgeType = useCallback((type: string) => {
+		captureViewport();
 		setHiddenEdgeTypes((prev) => {
 			const next = new Set(prev);
 			if (next.has(type)) next.delete(type);
 			else next.add(type);
 			return next;
 		});
-	}, []);
+	}, [captureViewport]);
 
 	const toggleHiddenNode = useCallback((nodeId: string) => {
+		captureViewport();
 		setHiddenNodes((prev) => {
 			const next = new Set(prev);
 			if (next.has(nodeId)) next.delete(nodeId);
@@ -1153,9 +1187,19 @@ function GraphPageContent() {
 		});
 		setSelectedNode((sel) => (sel?.id === nodeId ? null : sel));
 		setNodeDetails((det) => (det?.id === nodeId ? null : det));
-	}, []);
+	}, [captureViewport]);
 
-	const clearHiddenNodes = useCallback(() => setHiddenNodes(new Set()), []);
+	const clearHiddenNodes = useCallback(() => {
+		captureViewport();
+		setHiddenNodes(new Set());
+	}, [captureViewport]);
+
+	const clearAllFilters = useCallback(() => {
+		captureViewport();
+		setHiddenNodes(new Set());
+		setHiddenEdgeTypes(new Set());
+		setHiddenNodeTypes(new Set());
+	}, [captureViewport]);
 
 	const hasActiveFilters =
 		hiddenNodeTypes.size > 0 ||
@@ -1187,6 +1231,27 @@ function GraphPageContent() {
 
 		return { nodes, links: edges };
 	}, [graphData, hiddenNodeTypes, hiddenNodes, hiddenEdgeTypes]);
+
+	/* Keep viewport stable when filters change */
+	useEffect(() => {
+		const snapshot = pendingViewportRef.current;
+		if (!snapshot || !graphRef.current) return;
+
+		const restore = () => {
+			if (!graphRef.current) return;
+			graphRef.current.centerAt(snapshot.x, snapshot.y, 0);
+			graphRef.current.zoom(snapshot.zoom, 0);
+		};
+
+		const frame = requestAnimationFrame(restore);
+		const timeout = setTimeout(restore, 0);
+		pendingViewportRef.current = null;
+
+		return () => {
+			cancelAnimationFrame(frame);
+			clearTimeout(timeout);
+		};
+	}, [filteredData.nodes.length, filteredData.links.length]);
 
 	/* Canvas painting */
 	const paintNode = useCallback(
@@ -1873,11 +1938,7 @@ function GraphPageContent() {
 							edges
 							{hasActiveFilters && (
 								<button
-									onClick={() => {
-										setHiddenNodes(new Set());
-										setHiddenEdgeTypes(new Set());
-										setHiddenNodeTypes(new Set());
-									}}
+									onClick={clearAllFilters}
 									className="ml-1 flex items-center gap-0.5 text-blue-500 hover:text-blue-600 transition"
 									title="Clear all filters"
 								>
