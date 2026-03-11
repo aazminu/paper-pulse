@@ -489,7 +489,7 @@ def get_graph_context_for_query(paper_ids: list[str]) -> str:
         return "\n".join(lines) if len(lines) > 1 else ""
 
 
-def get_full_graph_visualization(limit: int = 200) -> dict:
+def get_full_graph_visualization() -> dict:
     """
     Return a subgraph for the full graph explorer.
     Returns papers, authors, concepts, and their relationships.
@@ -498,7 +498,6 @@ def get_full_graph_visualization(limit: int = 200) -> dict:
         result = s.run(
             """
             MATCH (p:Paper)
-            WITH p ORDER BY p.published_date DESC LIMIT $limit
             OPTIONAL MATCH (a:Author)-[:AUTHORED]->(p)
             OPTIONAL MATCH (p)-[:INVOLVES_CONCEPT]->(c:Concept)
             OPTIONAL MATCH (p)-[:CITES]->(cited:Paper)
@@ -509,8 +508,8 @@ def get_full_graph_visualization(limit: int = 200) -> dict:
                    collect(DISTINCT a.name) AS authors,
                    collect(DISTINCT {name: c.name, category: c.category}) AS concepts,
                    collect(DISTINCT cited.arxiv_id) AS cites
-            """,
-            limit=limit,
+            ORDER BY paper_date DESC
+            """
         )
 
         nodes = []
@@ -573,7 +572,7 @@ def get_full_graph_visualization(limit: int = 200) -> dict:
         return {"nodes": nodes, "edges": edges}
 
 
-def detect_clusters(limit: int = 200) -> list[dict]:
+def detect_clusters() -> list[dict]:
     """
     Detect paper clusters based on shared concepts and citations.
     Uses a simple connected-component approach on a paper similarity graph:
@@ -587,13 +586,11 @@ def detect_clusters(limit: int = 200) -> list[dict]:
         result = s.run(
             """
             MATCH (p:Paper)
-            WITH p ORDER BY p.published_date DESC LIMIT $limit
             OPTIONAL MATCH (p)-[:INVOLVES_CONCEPT]->(c:Concept)
             RETURN p.arxiv_id AS pid,
                    p.title AS title,
                    collect(DISTINCT c.name) AS concepts
-            """,
-            limit=limit,
+            """
         )
         papers = {}
         for r in result:

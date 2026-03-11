@@ -105,10 +105,10 @@ def concept_papers_route(name: str, limit: int = Query(default=20, le=50)):
 
 
 @router.get("/explore")
-def graph_explorer(limit: int = Query(default=200, le=500)):
+def graph_explorer():
     """Get full graph data for the interactive explorer."""
     try:
-        result = get_full_graph_visualization(limit=limit)
+        result = get_full_graph_visualization()
     except (ServiceUnavailable, SessionExpired, OSError) as e:
         logger.warning("Neo4j unavailable for graph_explorer: %s", e)
         raise HTTPException(status_code=503, detail="Knowledge graph is temporarily unavailable. Please retry in a moment.")
@@ -151,10 +151,10 @@ def search_nodes(q: str = Query(..., min_length=1), limit: int = Query(default=2
 
 
 @router.get("/clusters")
-def get_clusters(limit: int = Query(default=200, le=500)):
+def get_clusters():
     """Detect paper clusters based on shared concepts and citations."""
     try:
-        clusters = detect_clusters(limit=limit)
+        clusters = detect_clusters()
     except (ServiceUnavailable, SessionExpired, OSError) as e:
         logger.warning("Neo4j unavailable for get_clusters: %s", e)
         raise HTTPException(status_code=503, detail="Knowledge graph is temporarily unavailable. Please retry in a moment.")

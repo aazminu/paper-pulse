@@ -58,6 +58,8 @@ const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
 });
 
 const API = process.env.NEXT_PUBLIC_API_URL;
+const GRAPH_CACHE_VERSION = 1;
+const GRAPH_CACHE_PREFIX = "paperpulse:graph";
 
 /* Types */
 interface GraphNode {
@@ -135,6 +137,21 @@ interface SavedReport {
 	created_at: string;
 }
 
+interface GraphCachePayload {
+	version: number;
+	cached_at: number;
+	paper_count: number;
+	stats: GraphStats | null;
+	graph_data: GraphData;
+}
+
+interface ClusterCachePayload {
+	version: number;
+	cached_at: number;
+	paper_count: number;
+	clusters: Cluster[];
+}
+
 /* Constants */
 const NODE_COLORS: Record<string, string> = {
 	paper: "#3b82f6",
@@ -171,6 +188,27 @@ const TYPE_ICONS = {
 /* Helper */
 const getEdgeId = (val: string | GraphNode): string =>
 	typeof val === "string" ? val : val.id;
+
+function readStorage(key: string): string | null {
+	try {
+		return sessionStorage.getItem(key) ?? localStorage.getItem(key);
+	} catch {
+		return null;
+	}
+}
+
+function writeStorage(key: string, value: string) {
+	try {
+		sessionStorage.setItem(key, value);
+	} catch {
+		/* ignore */
+	}
+	try {
+		localStorage.setItem(key, value);
+	} catch {
+		/* ignore */
+	}
+}
 
 export default function GraphPage() {
 	return (
@@ -258,6 +296,61 @@ function GraphPageContent() {
 
 	const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const searchInputRef = useRef<HTMLInputElement>(null);
+	const graphCacheKey = `${GRAPH_CACHE_PREFIX}:v${GRAPH_CACHE_VERSION}:data:${user?.id ?? "anon"}`;
+	const clustersCacheKey = `${GRAPH_CACHE_PREFIX}:v${GRAPH_CACHE_VERSION}:clusters:${user?.id ?? "anon"}`;
+
+	const countPapersInGraph = useCallback((data: GraphData): number => {
+		return data.nodes.reduce(
+			(acc, node) => acc + (node.type === "paper" ? 1 : 0),
+			0,
+		);
+	}, []);
+
+	const readGraphCache = useCallback((): GraphCachePayload | null => {
+		if (typeof window === "undefined") return null;
+		const raw = readStorage(graphCacheKey);
+		if (!raw) return null;
+
+		try {
+			const parsed = JSON.parse(raw) as GraphCachePayload;
+			if (parsed.version !== GRAPH_CACHE_VERSION) return null;
+			if (!parsed.graph_data?.nodes || !parsed.graph_data?.edges) return null;
+			return parsed;
+		} catch {
+			return null;
+		}
+	}, [graphCacheKey]);
+
+	const writeGraphCache = useCallback(
+		(payload: GraphCachePayload) => {
+			if (typeof window === "undefined") return;
+			writeStorage(graphCacheKey, JSON.stringify(payload));
+		},
+		[graphCacheKey],
+	);
+
+	const readClustersCache = useCallback((): ClusterCachePayload | null => {
+		if (typeof window === "undefined") return null;
+		const raw = readStorage(clustersCacheKey);
+		if (!raw) return null;
+
+		try {
+			const parsed = JSON.parse(raw) as ClusterCachePayload;
+			if (parsed.version !== GRAPH_CACHE_VERSION) return null;
+			if (!Array.isArray(parsed.clusters)) return null;
+			return parsed;
+		} catch {
+			return null;
+		}
+	}, [clustersCacheKey]);
+
+	const writeClustersCache = useCallback(
+		(payload: ClusterCachePayload) => {
+			if (typeof window === "undefined") return;
+			writeStorage(clustersCacheKey, JSON.stringify(payload));
+		},
+		[clustersCacheKey],
+	);
 
 	/* Resize observer */
 	useEffect(() => {
@@ -275,45 +368,148 @@ function GraphPageContent() {
 
 	/* Fetch graph data */
 	useEffect(() => {
-		if (!isLoaded) return;
-		const fetchGraph = async () => {
-			try {
-				const [graphRes, statsRes] = await Promise.all([
-					authFetch(`${API}/graph/explore?limit=300`),
-					authFetch(`${API}/graph/stats`),
-				]);
-				if (graphRes.ok) {
-					const data = await graphRes.json();
-					setGraphData({ nodes: data.nodes || [], edges: data.edges || [] });
-				}
-				if (statsRes.ok) setStats(await statsRes.json());
-			} catch (error) {
-				console.error("Failed to fetch graph:", error);
-			} finally {
-				setLoading(false);
-			}
-		};
-		fetchGraph();
-	}, [isLoaded]);
+		if (!isLoaded || !user?.id) return;
 
-	/* Fetch clusters */
-	useEffect(() => {
-		if (loading || graphData.nodes.length === 0) return;
-		const fetchClusters = async () => {
-			setClustersLoading(true);
+		let cancelled = false;
+
+		const fetchGraph = async () => {
+			const cached = readGraphCache();
+
+			if (cached && !cancelled) {
+				setGraphData(cached.graph_data);
+				if (cached.stats) setStats(cached.stats);
+				setLoading(false);
+			} else {
+				setLoading(true);
+			}
+
+			let latestStats: GraphStats | null = null;
 			try {
-				const res = await authFetch(`${API}/graph/clusters?limit=300`);
-				if (res.ok) {
-					const data = await res.json();
-					setClusters(data.clusters || []);
+				const statsRes = await authFetch(`${API}/graph/stats`);
+				if (statsRes.ok) {
+					latestStats = await statsRes.json();
+					if (!cancelled) setStats(latestStats);
 				}
 			} catch {
 				/* ignore */
 			}
-			setClustersLoading(false);
+
+			const cachedPaperCount = cached?.paper_count ?? 0;
+			const serverPaperCount = latestStats?.papers ?? 0;
+			const shouldFetchFreshGraph =
+				!cached || serverPaperCount > cachedPaperCount;
+
+			if (shouldFetchFreshGraph) {
+				try {
+					const graphRes = await authFetch(`${API}/graph/explore`);
+					if (graphRes.ok) {
+						const data = await graphRes.json();
+						const nextGraphData: GraphData = {
+							nodes: data.nodes || [],
+							edges: data.edges || [],
+						};
+						const paperCount = countPapersInGraph(nextGraphData);
+
+						if (!cancelled) {
+							setGraphData(nextGraphData);
+						}
+
+						writeGraphCache({
+							version: GRAPH_CACHE_VERSION,
+							cached_at: Date.now(),
+							paper_count: paperCount,
+							stats: latestStats ?? cached?.stats ?? null,
+							graph_data: nextGraphData,
+						});
+					}
+				} catch (error) {
+					console.error("Failed to fetch graph:", error);
+				}
+			} else if (cached && latestStats) {
+				writeGraphCache({
+					...cached,
+					cached_at: Date.now(),
+					stats: latestStats,
+				});
+			}
+
+			if (!cancelled) setLoading(false);
 		};
+
+		fetchGraph();
+		return () => {
+			cancelled = true;
+		};
+	}, [
+		isLoaded,
+		user?.id,
+		countPapersInGraph,
+		readGraphCache,
+		writeGraphCache,
+	]);
+
+	/* Lazy-load clusters */
+	useEffect(() => {
+		if (!clustersExpanded || !isLoaded || !user?.id) return;
+
+		let cancelled = false;
+
+		const fetchClusters = async () => {
+			const cached = readClustersCache();
+			const serverPaperCount =
+				stats?.papers ??
+				graphData.nodes.reduce(
+					(acc, node) => acc + (node.type === "paper" ? 1 : 0),
+					0,
+				);
+
+			if (cached && !cancelled) {
+				setClusters(cached.clusters);
+			}
+
+			const cachedPaperCount = cached?.paper_count ?? 0;
+			const shouldFetchFreshClusters =
+				!cached || serverPaperCount > cachedPaperCount;
+
+			if (!shouldFetchFreshClusters) return;
+
+			if (!cancelled) setClustersLoading(true);
+			try {
+				const res = await authFetch(`${API}/graph/clusters`);
+				if (res.ok) {
+					const data = await res.json();
+					const nextClusters = data.clusters || [];
+					const nextPaperCount = Math.max(serverPaperCount, cachedPaperCount);
+
+					if (!cancelled) setClusters(nextClusters);
+
+					writeClustersCache({
+						version: GRAPH_CACHE_VERSION,
+						cached_at: Date.now(),
+						paper_count: nextPaperCount,
+						clusters: nextClusters,
+					});
+				}
+			} catch {
+				/* ignore */
+			} finally {
+				if (!cancelled) setClustersLoading(false);
+			}
+		};
+
 		fetchClusters();
-	}, [loading, graphData.nodes.length]);
+		return () => {
+			cancelled = true;
+		};
+	}, [
+		clustersExpanded,
+		isLoaded,
+		user?.id,
+		stats?.papers,
+		graphData.nodes,
+		readClustersCache,
+		writeClustersCache,
+	]);
 
 	/* Fetch saved reports */
 	useEffect(() => {
