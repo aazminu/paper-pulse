@@ -71,6 +71,10 @@ interface GraphNode {
 	date?: string;
 	x?: number;
 	y?: number;
+	fx?: number;
+	fy?: number;
+	vx?: number;
+	vy?: number;
 	__bckgDimRatio?: number;
 }
 
@@ -188,6 +192,10 @@ const TYPE_ICONS = {
 /* Helper */
 const getEdgeId = (val: string | GraphNode): string =>
 	typeof val === "string" ? val : val.id;
+
+function buildEdgeKey(source: string, target: string, type: GraphEdge["type"]): string {
+	return `${source}|${target}|${type}`;
+}
 
 const VALID_NODE_TYPES = new Set<GraphNode["type"]>([
 	"paper",
@@ -355,6 +363,7 @@ function GraphPageContent() {
 		new Set(),
 	);
 	const [hiddenNodes, setHiddenNodes] = useState<Set<string>>(new Set());
+	const [hiddenEdges, setHiddenEdges] = useState<Set<string>>(new Set());
 
 	/* Synthesize-mode state */
 	const [selectMode, setSelectMode] = useState(false);
@@ -489,6 +498,16 @@ function GraphPageContent() {
 			/* ignore */
 		}
 	}, [dimensions.width, dimensions.height]);
+
+	const lockCurrentLayout = useCallback(() => {
+		for (const node of graphData.nodes) {
+			if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) continue;
+			node.fx = node.x;
+			node.fy = node.y;
+			node.vx = 0;
+			node.vy = 0;
+		}
+	}, [graphData.nodes]);
 
 	/* Resize observer */
 	useEffect(() => {
@@ -1158,6 +1177,7 @@ function GraphPageContent() {
 
 	/* Toggle helpers */
 	const toggleNodeType = useCallback((type: string) => {
+		lockCurrentLayout();
 		captureViewport();
 		setHiddenNodeTypes((prev) => {
 			const next = new Set(prev);
@@ -1165,9 +1185,10 @@ function GraphPageContent() {
 			else next.add(type);
 			return next;
 		});
-	}, [captureViewport]);
+	}, [captureViewport, lockCurrentLayout]);
 
 	const toggleEdgeType = useCallback((type: string) => {
+		lockCurrentLayout();
 		captureViewport();
 		setHiddenEdgeTypes((prev) => {
 			const next = new Set(prev);
@@ -1175,9 +1196,10 @@ function GraphPageContent() {
 			else next.add(type);
 			return next;
 		});
-	}, [captureViewport]);
+	}, [captureViewport, lockCurrentLayout]);
 
 	const toggleHiddenNode = useCallback((nodeId: string) => {
+		lockCurrentLayout();
 		captureViewport();
 		setHiddenNodes((prev) => {
 			const next = new Set(prev);
@@ -1187,24 +1209,49 @@ function GraphPageContent() {
 		});
 		setSelectedNode((sel) => (sel?.id === nodeId ? null : sel));
 		setNodeDetails((det) => (det?.id === nodeId ? null : det));
-	}, [captureViewport]);
+	}, [captureViewport, lockCurrentLayout]);
+
+	const toggleHiddenEdge = useCallback(
+		(sourceId: string, targetId: string, type: GraphEdge["type"]) => {
+			lockCurrentLayout();
+			captureViewport();
+			const edgeKey = buildEdgeKey(sourceId, targetId, type);
+			setHiddenEdges((prev) => {
+				const next = new Set(prev);
+				if (next.has(edgeKey)) next.delete(edgeKey);
+				else next.add(edgeKey);
+				return next;
+			});
+		},
+		[captureViewport, lockCurrentLayout],
+	);
 
 	const clearHiddenNodes = useCallback(() => {
+		lockCurrentLayout();
 		captureViewport();
 		setHiddenNodes(new Set());
-	}, [captureViewport]);
+	}, [captureViewport, lockCurrentLayout]);
+
+	const clearHiddenEdges = useCallback(() => {
+		lockCurrentLayout();
+		captureViewport();
+		setHiddenEdges(new Set());
+	}, [captureViewport, lockCurrentLayout]);
 
 	const clearAllFilters = useCallback(() => {
+		lockCurrentLayout();
 		captureViewport();
 		setHiddenNodes(new Set());
+		setHiddenEdges(new Set());
 		setHiddenEdgeTypes(new Set());
 		setHiddenNodeTypes(new Set());
-	}, [captureViewport]);
+	}, [captureViewport, lockCurrentLayout]);
 
 	const hasActiveFilters =
 		hiddenNodeTypes.size > 0 ||
 		hiddenEdgeTypes.size > 0 ||
-		hiddenNodes.size > 0;
+		hiddenNodes.size > 0 ||
+		hiddenEdges.size > 0;
 
 	/* Filtered data */
 	const filteredData = useMemo(() => {
@@ -1229,8 +1276,15 @@ function GraphPageContent() {
 			edges = edges.filter((e) => !hiddenEdgeTypes.has(e.type));
 		}
 
+		if (hiddenEdges.size > 0) {
+			edges = edges.filter((e) => {
+				const key = buildEdgeKey(getEdgeId(e.source), getEdgeId(e.target), e.type);
+				return !hiddenEdges.has(key);
+			});
+		}
+
 		return { nodes, links: edges };
-	}, [graphData, hiddenNodeTypes, hiddenNodes, hiddenEdgeTypes]);
+	}, [graphData, hiddenNodeTypes, hiddenNodes, hiddenEdgeTypes, hiddenEdges]);
 
 	/* Keep viewport stable when filters change */
 	useEffect(() => {
@@ -1704,6 +1758,60 @@ function GraphPageContent() {
 													<span className="truncate flex-1 text-left">
 														{node?.label || id}
 													</span>
+													<Eye className="h-2.5 w-2.5 shrink-0 opacity-0 group-hover:opacity-100 transition" />
+												</button>
+											);
+										})}
+									</div>
+								</div>
+							)}
+
+							{/* Hidden Edges */}
+							{hiddenEdges.size > 0 && (
+								<div>
+									<div className="flex items-center justify-between mb-2">
+										<h3 className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 flex items-center gap-1">
+											<EyeOff className="h-3 w-3" />
+											Hidden Edges ({hiddenEdges.size})
+										</h3>
+										<button
+											onClick={clearHiddenEdges}
+											className="text-[10px] text-blue-500 hover:text-blue-600 flex items-center gap-0.5 transition"
+										>
+											<RotateCcw className="h-2.5 w-2.5" />
+											Show all
+										</button>
+									</div>
+									<div className="space-y-0.5 max-h-32 overflow-y-auto">
+										{Array.from(hiddenEdges).map((edgeKey) => {
+											const [sourceId, targetId, type] = edgeKey.split("|");
+											const sourceLabel =
+												graphData.nodes.find((n) => n.id === sourceId)?.label ||
+												sourceId;
+											const targetLabel =
+												graphData.nodes.find((n) => n.id === targetId)?.label ||
+												targetId;
+											return (
+												<button
+													key={edgeKey}
+													onClick={() =>
+														toggleHiddenEdge(
+															sourceId,
+															targetId,
+															type as GraphEdge["type"],
+														)
+													}
+													className="w-full flex items-center gap-1.5 text-[10px] text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 py-1 px-2 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 transition group"
+												>
+													<span
+														className="w-4 h-0.5 rounded inline-block shrink-0"
+														style={{ backgroundColor: EDGE_COLORS[type] || "#999" }}
+													/>
+														<span className="truncate flex-1 text-left">
+															{sourceLabel}
+															{" -> "}
+															{targetLabel}
+														</span>
 													<Eye className="h-2.5 w-2.5 shrink-0 opacity-0 group-hover:opacity-100 transition" />
 												</button>
 											);
@@ -2237,6 +2345,32 @@ function GraphPageContent() {
 																	<button
 																		onClick={(e) => {
 																			e.stopPropagation();
+																			toggleHiddenEdge(
+																				selectedNode.id,
+																				c.id,
+																				"cites",
+																			);
+																		}}
+																		className={`p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 transition shrink-0 ${
+																			hiddenEdges.has(
+																				buildEdgeKey(selectedNode.id, c.id, "cites"),
+																			)
+																				? "opacity-100 text-blue-500"
+																				: "opacity-0 group-hover/ref:opacity-100"
+																		}`}
+																		title={
+																			hiddenEdges.has(
+																				buildEdgeKey(selectedNode.id, c.id, "cites"),
+																			)
+																				? "Show this citation edge"
+																				: "Hide this citation edge"
+																		}
+																	>
+																		<EyeOff className="h-2.5 w-2.5" />
+																	</button>
+																	<button
+																		onClick={(e) => {
+																			e.stopPropagation();
 																			toggleHiddenNode(c.id);
 																		}}
 																		className="opacity-0 group-hover/ref:opacity-100 p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 transition shrink-0"
@@ -2273,6 +2407,28 @@ function GraphPageContent() {
 																			className="flex-1 text-left text-xs text-blue-600 hover:text-blue-700 hover:underline line-clamp-1"
 																		>
 																			{c.title || c.id}
+																		</button>
+																		<button
+																			onClick={(e) => {
+																				e.stopPropagation();
+																				toggleHiddenEdge(c.id, selectedNode.id, "cites");
+																			}}
+																			className={`p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 transition shrink-0 ${
+																				hiddenEdges.has(
+																					buildEdgeKey(c.id, selectedNode.id, "cites"),
+																				)
+																					? "opacity-100 text-blue-500"
+																					: "opacity-0 group-hover/citedby:opacity-100"
+																			}`}
+																			title={
+																				hiddenEdges.has(
+																					buildEdgeKey(c.id, selectedNode.id, "cites"),
+																				)
+																					? "Show this citation edge"
+																					: "Hide this citation edge"
+																			}
+																		>
+																			<EyeOff className="h-2.5 w-2.5" />
 																		</button>
 																		<button
 																			onClick={(e) => {
@@ -2338,16 +2494,52 @@ function GraphPageContent() {
 																				</p>
 																			)}
 																		</button>
-																		<button
-																			onClick={(e) => {
-																				e.stopPropagation();
-																				toggleHiddenNode(p.id);
-																			}}
-																			className="absolute top-2 right-2 opacity-0 group-hover/apaper:opacity-100 p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 transition"
-																			title="Hide this paper"
-																		>
-																			<EyeOff className="h-2.5 w-2.5 text-zinc-400" />
-																		</button>
+																			<div className="absolute top-2 right-2 opacity-0 group-hover/apaper:opacity-100 flex items-center gap-0.5 transition">
+																				<button
+																					onClick={(e) => {
+																						e.stopPropagation();
+																						toggleHiddenEdge(
+																							selectedNode.id,
+																							p.id,
+																							"authored",
+																						);
+																					}}
+																					className={`p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 transition ${
+																						hiddenEdges.has(
+																							buildEdgeKey(
+																								selectedNode.id,
+																								p.id,
+																								"authored",
+																							),
+																						)
+																							? "text-blue-500"
+																							: ""
+																					}`}
+																					title={
+																						hiddenEdges.has(
+																							buildEdgeKey(
+																								selectedNode.id,
+																								p.id,
+																								"authored",
+																							),
+																						)
+																							? "Show this authorship edge"
+																							: "Hide this authorship edge"
+																					}
+																				>
+																					<EyeOff className="h-2.5 w-2.5" />
+																				</button>
+																				<button
+																					onClick={(e) => {
+																						e.stopPropagation();
+																						toggleHiddenNode(p.id);
+																					}}
+																					className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 transition"
+																					title="Hide this paper"
+																				>
+																					<EyeOff className="h-2.5 w-2.5 text-zinc-400" />
+																				</button>
+																			</div>
 																	</div>
 																))}
 															</div>
@@ -2400,16 +2592,52 @@ function GraphPageContent() {
 																				</p>
 																			)}
 																		</button>
-																		<button
-																			onClick={(e) => {
-																				e.stopPropagation();
-																				toggleHiddenNode(p.id);
-																			}}
-																			className="absolute top-2 right-2 opacity-0 group-hover/cpaper:opacity-100 p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 transition"
-																			title="Hide this paper"
-																		>
-																			<EyeOff className="h-2.5 w-2.5 text-zinc-400" />
-																		</button>
+																			<div className="absolute top-2 right-2 opacity-0 group-hover/cpaper:opacity-100 flex items-center gap-0.5 transition">
+																				<button
+																					onClick={(e) => {
+																						e.stopPropagation();
+																						toggleHiddenEdge(
+																							p.id,
+																							selectedNode.id,
+																							"involves",
+																						);
+																					}}
+																					className={`p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 transition ${
+																						hiddenEdges.has(
+																							buildEdgeKey(
+																								p.id,
+																								selectedNode.id,
+																								"involves",
+																							),
+																						)
+																							? "text-blue-500"
+																							: ""
+																					}`}
+																					title={
+																						hiddenEdges.has(
+																							buildEdgeKey(
+																								p.id,
+																								selectedNode.id,
+																								"involves",
+																							),
+																						)
+																							? "Show this concept edge"
+																							: "Hide this concept edge"
+																					}
+																				>
+																					<EyeOff className="h-2.5 w-2.5" />
+																				</button>
+																				<button
+																					onClick={(e) => {
+																						e.stopPropagation();
+																						toggleHiddenNode(p.id);
+																					}}
+																					className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-700 transition"
+																					title="Hide this paper"
+																				>
+																					<EyeOff className="h-2.5 w-2.5 text-zinc-400" />
+																				</button>
+																			</div>
 																	</div>
 																))}
 															</div>
