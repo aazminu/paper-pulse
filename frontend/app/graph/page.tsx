@@ -58,7 +58,7 @@ const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
 });
 
 const API = process.env.NEXT_PUBLIC_API_URL;
-const GRAPH_CACHE_VERSION = 1;
+const GRAPH_CACHE_VERSION = 2;
 const GRAPH_CACHE_PREFIX = "paperpulse:graph";
 
 /* Types */
@@ -189,6 +189,108 @@ const TYPE_ICONS = {
 const getEdgeId = (val: string | GraphNode): string =>
 	typeof val === "string" ? val : val.id;
 
+const VALID_NODE_TYPES = new Set<GraphNode["type"]>([
+	"paper",
+	"author",
+	"concept",
+]);
+const VALID_EDGE_TYPES = new Set<GraphEdge["type"]>([
+	"authored",
+	"involves",
+	"cites",
+]);
+
+function getNodeIdFromUnknown(value: unknown): string | null {
+	if (typeof value === "string" && value) return value;
+	if (
+		value &&
+		typeof value === "object" &&
+		"id" in value &&
+		typeof value.id === "string" &&
+		value.id
+	) {
+		return value.id;
+	}
+	return null;
+}
+
+function normalizeGraphData(input: unknown): GraphData {
+	if (!input || typeof input !== "object") return { nodes: [], edges: [] };
+
+	const rawNodes =
+		"nodes" in input && Array.isArray(input.nodes) ? input.nodes : [];
+	const rawEdges =
+		"edges" in input && Array.isArray(input.edges) ? input.edges : [];
+
+	const nodes: GraphNode[] = [];
+	const nodeIds = new Set<string>();
+
+	for (const raw of rawNodes) {
+		if (!raw || typeof raw !== "object") continue;
+		const id = "id" in raw && typeof raw.id === "string" ? raw.id : "";
+		const label =
+			"label" in raw && typeof raw.label === "string" ? raw.label : id;
+		const type =
+			"type" in raw && typeof raw.type === "string"
+				? (raw.type as GraphNode["type"])
+				: null;
+		if (!id || !type || !VALID_NODE_TYPES.has(type) || nodeIds.has(id)) continue;
+
+		nodes.push({
+			id,
+			label: label || id,
+			type,
+			source:
+				"source" in raw && typeof raw.source === "string"
+					? raw.source
+					: undefined,
+			category:
+				"category" in raw && typeof raw.category === "string"
+					? raw.category
+					: undefined,
+			date:
+				"date" in raw && typeof raw.date === "string" ? raw.date : undefined,
+		});
+		nodeIds.add(id);
+	}
+
+	const edges: GraphEdge[] = [];
+	const seenEdgeKeys = new Set<string>();
+
+	for (const raw of rawEdges) {
+		if (!raw || typeof raw !== "object") continue;
+		const type =
+			"type" in raw && typeof raw.type === "string"
+				? (raw.type as GraphEdge["type"])
+				: null;
+		if (!type || !VALID_EDGE_TYPES.has(type)) continue;
+
+		const source = "source" in raw ? getNodeIdFromUnknown(raw.source) : null;
+		const target = "target" in raw ? getNodeIdFromUnknown(raw.target) : null;
+		if (!source || !target) continue;
+		if (!nodeIds.has(source) || !nodeIds.has(target)) continue;
+
+		const edgeKey = `${source}|${target}|${type}`;
+		if (seenEdgeKeys.has(edgeKey)) continue;
+		seenEdgeKeys.add(edgeKey);
+
+		edges.push({ source, target, type });
+	}
+
+	return { nodes, edges };
+}
+
+function cloneGraphData(data: GraphData): GraphData {
+	return {
+		nodes: data.nodes.map((n) => ({ ...n })),
+		edges: data.edges.map((e) => ({
+			source: typeof e.source === "string" ? e.source : e.source.id,
+			target: typeof e.target === "string" ? e.target : e.target.id,
+			type: e.type,
+		})),
+	};
+}
+
 function readStorage(key: string): string | null {
 	try {
 		return sessionStorage.getItem(key) ?? localStorage.getItem(key);
@@ -314,12 +416,17 @@ function GraphPageContent() {
 		try {
 			const parsed = JSON.parse(raw) as GraphCachePayload;
 			if (parsed.version !== GRAPH_CACHE_VERSION) return null;
-			if (!parsed.graph_data?.nodes || !parsed.graph_data?.edges) return null;
-			return parsed;
+			const normalizedGraph = normalizeGraphData(parsed.graph_data);
+			const paperCount = countPapersInGraph(normalizedGraph);
+			return {
+				...parsed,
+				paper_count: paperCount,
+				graph_data: normalizedGraph,
+			};
 		} catch {
 			return null;
 		}
-	}, [graphCacheKey]);
+	}, [graphCacheKey, countPapersInGraph]);
 
 	const writeGraphCache = useCallback(
 		(payload: GraphCachePayload) => {
@@ -376,7 +483,7 @@ function GraphPageContent() {
 			const cached = readGraphCache();
 
 			if (cached && !cancelled) {
-				setGraphData(cached.graph_data);
+				setGraphData(cloneGraphData(cached.graph_data));
 				if (cached.stats) setStats(cached.stats);
 				setLoading(false);
 			} else {
@@ -404,14 +511,14 @@ function GraphPageContent() {
 					const graphRes = await authFetch(`${API}/graph/explore`);
 					if (graphRes.ok) {
 						const data = await graphRes.json();
-						const nextGraphData: GraphData = {
+						const nextGraphData = normalizeGraphData({
 							nodes: data.nodes || [],
 							edges: data.edges || [],
-						};
+						});
 						const paperCount = countPapersInGraph(nextGraphData);
 
 						if (!cancelled) {
-							setGraphData(nextGraphData);
+							setGraphData(cloneGraphData(nextGraphData));
 						}
 
 						writeGraphCache({
