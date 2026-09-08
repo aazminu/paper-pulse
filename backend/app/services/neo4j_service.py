@@ -936,6 +936,22 @@ def search_graph_nodes(query: str, limit: int = 20) -> list[dict]:
     return results[:limit]
 
 
+def get_papers_with_concepts(paper_ids: list[str]) -> set[str]:
+    """Return the subset of paper_ids that already have concepts in the graph."""
+    if not paper_ids:
+        return set()
+    with get_session() as s:
+        result = s.run(
+            """
+            MATCH (p:Paper)-[:INVOLVES_CONCEPT]->(:Concept)
+            WHERE p.arxiv_id IN $paper_ids
+            RETURN DISTINCT p.arxiv_id AS arxiv_id
+            """,
+            paper_ids=paper_ids,
+        )
+        return {r["arxiv_id"] for r in result}
+
+
 def get_graph_stats() -> dict:
     """Return basic graph statistics."""
     with get_session() as s:

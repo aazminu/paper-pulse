@@ -27,6 +27,7 @@ from app.services.neo4j_service import (
     upsert_institutions_batch,
     add_citations,
     get_graph_stats,
+    get_papers_with_concepts,
 )
 from app.services.entity_extraction_service import batch_extract_entities
 from app.services.citation_service import batch_fetch_citations
@@ -86,14 +87,16 @@ def fetch_openalex_affiliations(papers: list[dict]) -> list[dict]:
     return affiliations
 
 
-def run_graph_pipeline(paper_ids: list[str] | None = None):
+def run_graph_pipeline(paper_ids: list[str] | None = None, force_reextract: bool = False):
     """
     Populate the Neo4j knowledge graph.
 
     Args:
-        paper_ids: Specific paper IDs to process. If None, processes
-                   papers that haven't been graphed yet (tracked via
-                   'graph_processed' flag in Supabase).
+        paper_ids: Specific paper IDs to process. If None, processes the
+                   most recent MAX_PAPERS_PER_RUN papers.
+        force_reextract: Re-run LLM concept extraction even for papers that
+                   already have concepts in the graph. Off by default, since
+                   re-extracting is the pipeline's main recurring cost.
     """
     logger.info("="*60)
     logger.info("Starting Knowledge Graph Pipeline")
@@ -131,7 +134,14 @@ def run_graph_pipeline(paper_ids: list[str] | None = None):
     logger.info("  Processed authors for %d papers", len(papers))
 
     logger.info("--- Step 3: Extracting concepts via LLM ---")
-    entities_map = batch_extract_entities(papers)
+    if force_reextract:
+        papers_to_extract = papers
+    else:
+        already_graphed = get_papers_with_concepts([p["arxiv_id"] for p in papers])
+        papers_to_extract = [p for p in papers if p["arxiv_id"] not in already_graphed]
+        logger.info("  Skipping %d papers that already have concepts", len(already_graphed))
+    logger.info("  Extracting concepts for %d papers", len(papers_to_extract))
+    entities_map = batch_extract_entities(papers_to_extract)
 
     concept_count = 0
     affiliation_count = 0
