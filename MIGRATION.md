@@ -413,10 +413,10 @@ places where this app differs from GrabPic and where a problem would be hard to 
   more than once, while one Coolify container can only fire it once.
 - **`/pipeline/status` is in-memory.** It resets to `{"running": false}` on every restart, so it
   reports nothing about a run that was interrupted. Trust the logs over the endpoint.
-- **Neo4j Aura Free deletes paused instances after 30 days.** Pausing after 3 idle days is
-  recoverable, deletion is not, and it would take the whole knowledge graph with it. The nightly
-  pipeline writes to it daily, so as long as the scheduler is alive you're fine. That's another
-  reason to confirm Step 5's pipeline run.
+- **Neo4j no longer has a deletion timer.** This used to be the biggest risk here: Aura Free
+  deletes paused instances after 30 days, and it had already happened once. Since Step 5b the graph
+  runs in a container on Nitro with a named volume, so it neither pauses nor expires. The data is
+  also reconstructible from Supabase, which makes it the least precious thing in the stack.
 - **The nightly run is the memory spike, not the idle load.** Idle is 187 MB, but the pipeline
   parses PDFs with PyMuPDF across four sources at once. Nitro has 23 GB free and Immich is the only
   other heavy tenant, so there's plenty of headroom. Worth a glance at `docker stats` after the
