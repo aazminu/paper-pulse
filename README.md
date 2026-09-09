@@ -1,81 +1,42 @@
 # PaperPulse
 
-![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.133-009688?logo=fastapi&logoColor=white)
-![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=next.js&logoColor=white)
-![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
-![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)
-![Neo4j](https://img.shields.io/badge/Neo4j-6.1-4581C3?logo=neo4j&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Supabase-4169E1?logo=postgresql&logoColor=white)
-![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4.1-412991?logo=openai&logoColor=white)
-![Cohere](https://img.shields.io/badge/Cohere-Rerank_v4-39594D)
-![AWS](https://img.shields.io/badge/AWS-App_Runner-FF9900?logo=amazonwebservices&logoColor=white)
-![Vercel](https://img.shields.io/badge/Vercel-Deployed-000000?logo=vercel&logoColor=white)
-![GitHub Actions](https://img.shields.io/badge/CI%2FCD-GitHub_Actions-2088FF?logo=githubactions&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-green)
+PaperPulse is a research digest. You describe what you work on, and every night it searches ArXiv,
+Semantic Scholar, PubMed, and OpenAlex, ranks what turns up against your interests, and puts the
+twenty-five most relevant papers in your feed. It summarizes each one, builds a graph of how the
+papers connect to their authors, concepts, and citations, and answers questions using the full text
+rather than just the abstracts.
 
-An AI-powered academic research platform that aggregates papers from four major sources, builds a knowledge graph of research connections, and lets you ask questions about your personalized paper feed using retrieval-augmented generation.
+Python and FastAPI on the backend, Next.js on the front, Postgres with pgvector for retrieval, and
+Neo4j for the graph.
 
----
+## Contents
 
-## Table of Contents
-
-**For Everyone**
-
-- [What Is PaperPulse](#what-is-paperpulse)
 - [Demo](#demo)
-- [Key Features](#key-features)
-- [How It Works](#how-it-works)
-
-**For Developers**
-
-- [Architecture Overview](#architecture-overview)
-- [System Design](#system-design)
-  - [Data Ingestion Pipeline](#data-ingestion-pipeline)
-  - [Paper Processing](#paper-processing)
-  - [Retrieval and Ranking](#retrieval-and-ranking)
-  - [Knowledge Graph](#knowledge-graph)
-  - [AI Question Answering](#ai-question-answering)
-  - [Agent-Based Graph Traversal](#agent-based-graph-traversal)
-- [Tech Stack](#tech-stack)
-- [Authentication and Security](#authentication-and-security)
+- [What it does](#what-it-does)
+- [How it works](#how-it-works)
+- [Architecture](#architecture)
+- [System design](#system-design)
+  - [Data ingestion pipeline](#data-ingestion-pipeline)
+  - [Paper processing](#paper-processing)
+  - [Retrieval and ranking](#retrieval-and-ranking)
+  - [Knowledge graph](#knowledge-graph)
+  - [Question answering](#question-answering)
+  - [Agent-based graph traversal](#agent-based-graph-traversal)
+- [Tech stack](#tech-stack)
+- [Authentication and security](#authentication-and-security)
 - [Deployment](#deployment)
-- [Database Schema](#database-schema)
-- [API Reference](#api-reference)
-- [Frontend Pages](#frontend-pages)
-- [Getting Started](#getting-started)
-- [Environment Variables](#environment-variables)
-- [Project Structure](#project-structure)
-
----
-
-## What Is PaperPulse
-
-Keeping up with academic research is hard. Thousands of papers are published every day across ArXiv, PubMed, Semantic Scholar, and OpenAlex. Reading even a fraction of them takes hours.
-
-PaperPulse solves this by acting as a personal research assistant. You tell it what topics you care about, and it does the rest:
-
-- **Finds relevant papers** from four major academic databases every day
-- **Ranks them** using neural reranking so the most important papers appear first
-- **Summarizes each paper** in three plain-English sentences
-- **Builds a knowledge graph** that maps how papers, authors, concepts, and institutions connect to each other
-- **Answers your questions** about the papers using the actual content, not just titles and abstracts
-- **Generates literature reviews** from selected papers, complete with citation diagrams
-
-You sign up, pick your research areas, describe your interests in a sentence or two, and PaperPulse starts curating a daily feed tailored to you.
+- [Database schema](#database-schema)
+- [API reference](#api-reference)
+- [Frontend](#frontend)
+- [Getting started](#getting-started)
+- [Environment variables](#environment-variables)
+- [Project structure](#project-structure)
 
 ---
 
 ## Demo
 
-<!-- Replace these placeholders with actual screenshots and video -->
-
-### Video Walkthrough
-
 https://github.com/user-attachments/assets/210e88fc-17cb-4535-a9b2-9a7fb31ba108
-
-### Screenshots
 
 **Feed**
 
@@ -89,9 +50,9 @@ https://github.com/user-attachments/assets/210e88fc-17cb-4535-a9b2-9a7fb31ba108
 
 <br/><br/>
 
-**Knowledge Graph**
+**Knowledge graph**
 
-<img width="1912" height="903" alt="Knowledge Graph" src="https://github.com/user-attachments/assets/9b990379-0ce6-455b-93f4-68e779a9a66f" />
+<img width="1912" height="903" alt="Knowledge graph" src="https://github.com/user-attachments/assets/9b990379-0ce6-455b-93f4-68e779a9a66f" />
 
 <br/><br/>
 
@@ -101,69 +62,64 @@ https://github.com/user-attachments/assets/210e88fc-17cb-4535-a9b2-9a7fb31ba108
 
 <br/><br/>
 
-**Saved Papers**
+**Saved papers**
 
-<img width="1915" height="905" alt="Saved Papers" src="https://github.com/user-attachments/assets/8c23b5a8-cf23-464e-9d5c-e0cd162fe203" />
+<img width="1915" height="905" alt="Saved papers" src="https://github.com/user-attachments/assets/8c23b5a8-cf23-464e-9d5c-e0cd162fe203" />
 
 <br/><br/>
 
-**Literature Review**
+**Literature review**
 
-<img width="1912" height="909" alt="Literature Review" src="https://github.com/user-attachments/assets/fd0dd702-5c28-4e32-9d76-70638495a283" />
-
----
-
-## Key Features
-
-### Daily Personalized Feed
-
-Papers are fetched from ArXiv, Semantic Scholar, PubMed, and OpenAlex based on your selected domains and interests. Each paper is ranked by relevance to your profile using Cohere neural reranking, and the top 25 appear in your feed grouped by date.
-
-### AI-Generated Summaries
-
-Every paper gets a three-sentence summary written by an AI reasoning model. These summaries explain what the paper does, why it matters, and what the key results are, without requiring you to read the full paper.
-
-### Ask AI with Full Paper Context
-
-Ask questions about any paper or topic in your feed. The system retrieves relevant paper content using hybrid search across titles, chunks, and full papers, enriches it with knowledge graph context, and streams a detailed answer with inline citations.
-
-### Multimodal Input
-
-Upload images, PDFs, Word documents, audio files, or video alongside your questions. The system extracts text or transcribes media and includes it in the AI response context.
-
-### Knowledge Graph Explorer
-
-An interactive force-directed graph visualization that shows how papers, authors, concepts, and institutions relate to each other. Click any node to see its connections, search across the graph, filter by node or edge type, and detect research clusters automatically.
-
-### Literature Synthesis
-
-Select papers from the knowledge graph and generate structured literature reviews. Three modes are available:
-
-- **Quick Review** produces a concise overview with a Mermaid citation diagram
-- **Publication Review** generates a multi-section academic review with BibTeX references
-- **Deep Analysis** uses an autonomous AI agent that explores the graph iteratively, discovers themes, and writes a comprehensive synthesis
-
-### Persistent Chat History
-
-All conversations are saved with full message history, file attachments, and source citations. Chats can be starred, renamed, searched, and resumed at any time.
+<img width="1912" height="909" alt="Literature review" src="https://github.com/user-attachments/assets/fd0dd702-5c28-4e32-9d76-70638495a283" />
 
 ---
 
-## How It Works
+## What it does
 
-For non-technical readers, here is the simplified flow:
+**Daily feed.** Papers are fetched from four databases based on your domains and interests, ranked
+against your profile with Cohere reranking. The top twenty-five appear grouped by date.
 
-1. **You sign up** with Google, GitHub, or email and pick topics like "Computer Science" or "Biology" and describe what specifically interests you
-2. **PaperPulse optimizes your interests** into precise search queries using AI
-3. **Every day at midnight**, the system searches four academic databases for papers matching your interests
-4. **Each paper is processed**: the full PDF text is extracted, an embedding vector is created for semantic search, and a summary is generated
-5. **Papers are ranked** by how relevant they are to your specific interests, and the top 25 land in your daily feed
-6. **A knowledge graph is built** connecting papers to their authors, key concepts, institutions, and citation relationships
-7. **When you ask a question**, the system finds the most relevant paper sections, adds knowledge graph context, and generates a detailed answer with citations
+**Summaries.** Each paper gets a three-sentence summary covering the problem, the approach, and the
+findings, written from the extracted full text.
+
+**Questions with citations.** Ask about any paper or topic in your feed. Retrieval runs a hybrid
+search across titles, chunks, and whole papers, adds knowledge graph context, and streams back an
+answer with inline citations.
+
+**File input.** Images, PDFs, Word documents, audio, and video can be attached to a question. Text
+is extracted or the media is transcribed, then included in the context.
+
+**Graph explorer.** A force-directed view of how papers, authors, concepts, and institutions relate.
+Click a node for its connections, search the graph, filter by node or edge type, and see
+automatically detected clusters.
+
+**Literature synthesis.** Select papers in the graph and generate a review in one of three modes:
+
+| Mode     | Output                                                          |
+| -------- | --------------------------------------------------------------- |
+| Quick    | Concise overview with a Mermaid citation diagram                |
+| Academic | Multi-section review with BibTeX references                     |
+| Deep     | Agent explores the graph iteratively, then writes the synthesis |
+
+**Chat history.** Conversations are saved with their messages, attachments, and citations. Chats can
+be starred, renamed, searched, and resumed.
 
 ---
 
-## Architecture Overview
+## How it works
+
+1. You sign up with Google, GitHub, or email, pick your domains, and describe your interests
+2. Those interests are turned into focused search queries
+3. Every night at midnight UTC, four academic databases are searched
+4. Each paper is processed: PDF text extracted, embedding created, summary generated
+5. Papers are ranked against your interests and the top twenty-five go into your feed
+6. A knowledge graph is built linking papers to authors, concepts, institutions, and citations
+7. When you ask something, the most relevant sections are retrieved, graph context is added, and an
+   answer is generated with citations
+
+---
+
+## Architecture
 
 ```mermaid
 graph TB
@@ -171,7 +127,6 @@ graph TB
         VCL[Vercel]
         AR[AWS App Runner]
         ECR[AWS ECR]
-        GHA[GitHub Actions CI/CD]
     end
 
     subgraph Frontend
@@ -208,7 +163,7 @@ graph TB
         QO[Query Optimizer]
     end
 
-    subgraph AI Models
+    subgraph Models
         GPT[GPT-4.1 - Q&A and Synthesis]
         O4M[o4-mini - Summaries and Classification]
         EMM[text-embedding-3-large]
@@ -227,7 +182,6 @@ graph TB
         GP[Graph Population]
     end
 
-    GHA --> ECR
     ECR --> AR
     VCL --> Frontend
     AR --> Backend
@@ -280,11 +234,12 @@ graph TB
 
 ---
 
-## System Design
+## System design
 
-### Data Ingestion Pipeline
+### Data ingestion pipeline
 
-The daily pipeline runs automatically at midnight via APScheduler and can also be triggered manually. It processes papers on a per-user basis.
+The pipeline runs at midnight via APScheduler and can also be triggered manually. It processes
+papers per user.
 
 ```mermaid
 flowchart TD
@@ -318,11 +273,15 @@ flowchart TD
     FEED --> GRAPH[Run Graph Pipeline]
 ```
 
-**Query optimization** runs once when a user first onboards, then refreshes automatically every 7 days. The system takes the user's free-text interests and selected domains, and uses o4-mini to generate 3-5 focused search queries, 6-10 technical keywords, and 2-5 specific ArXiv sub-categories. These optimized queries are cached in the user record with a `generated_at` timestamp and reused on subsequent daily pipeline runs until the 7-day refresh window expires.
+Query optimization runs once when a user onboards, then refreshes every 7 days. It takes the user's
+free-text interests and selected domains and produces 3 to 5 focused search queries, 6 to 10
+technical keywords, and 2 to 5 ArXiv sub-categories. These are cached in the user record with a
+`generated_at` timestamp and reused on nightly runs until the refresh window expires.
 
-> **Daily vs. 7-day**: The pipeline itself runs **every day at midnight** (UTC), fetching and ranking new papers for every user. The 7-day cycle only controls how often the **search queries** are regenerated — the actual paper fetching, embedding, summarization, and ranking happen every single night.
+The 7-day cycle only controls how often the search queries are regenerated. Fetching, embedding,
+summarizing, and ranking happen every night.
 
-**Paper source details**:
+Source details:
 
 | Source           | API             | Rate Limit            | Batch Size         | Daily Lookback | Bootstrap Lookback |
 | ---------------- | --------------- | --------------------- | ------------------ | -------------- | ------------------ |
@@ -331,21 +290,25 @@ flowchart TD
 | PubMed           | E-utilities XML | 0.35s with API key    | 50 per fetch batch | 7 days         | 30 days            |
 | OpenAlex         | REST JSON       | 0.2s between requests | 50 per page        | 3 days         | 30 days            |
 
-**Feed exclusion**: Before reranking, the pipeline queries each user's existing `feed_items` and removes any papers they have already received, ensuring only new papers enter the feed.
+Before reranking, the pipeline reads each user's existing `feed_items` and drops papers they have
+already been shown, so only new work enters the feed.
 
-**Deduplication** prefers ArXiv versions when the same paper appears from multiple sources. Papers are matched by ArXiv ID first, then by normalized title similarity.
+Deduplication prefers ArXiv versions when the same paper arrives from several sources. Papers are
+matched by ArXiv ID first, then by normalized title similarity.
 
-### Paper Processing
+### Paper processing
 
-Each paper goes through several processing stages after fetching:
+Full-text extraction downloads the PDF from ArXiv and pulls text with PyMuPDF. The text is cleaned
+by removing null bytes, collapsing whitespace, stripping page numbers, and fixing hyphenation
+artifacts. Output is capped at 120,000 characters, roughly 30,000 tokens.
 
-**Full-text extraction** downloads the PDF from ArXiv and extracts text using PyMuPDF. The extracted text is cleaned by removing null bytes, collapsing whitespace, stripping page numbers, and fixing hyphenation artifacts. Output is capped at 120,000 characters, which is roughly 30,000 tokens.
+Embedding uses OpenAI text-embedding-3-large at 1536 dimensions, in batches of 64. The vector comes
+from the abstract and is stored in a pgvector column.
 
-**Embedding** uses OpenAI text-embedding-3-large at 1536 dimensions. Papers are embedded in batches of 64. The embedding is generated from the paper abstract and stored as a pgvector column for semantic search.
+Summarization uses o4-mini with reasoning effort set to low, for cost. Each paper gets three
+sentences covering problem, approach, and findings.
 
-**Summarization** uses o4-mini with reasoning effort set to "low" for cost efficiency. Each paper gets a three-sentence summary explaining the problem, approach, and findings.
-
-**Chunking** splits full-text papers into overlapping segments for sub-document retrieval:
+Chunking splits full-text papers into overlapping segments for sub-document retrieval:
 
 | Parameter              | Value       |
 | ---------------------- | ----------- |
@@ -354,11 +317,12 @@ Each paper goes through several processing stages after fetching:
 | Minimum chunk size     | 50 tokens   |
 | Tokenizer              | cl100k_base |
 
-The chunking algorithm splits on paragraph boundaries first, then falls back to sentence-level splitting for oversized paragraphs. Each chunk is prefixed with the paper title to give the embedding model document-level context.
+Chunking splits on paragraph boundaries first and falls back to sentences for oversized paragraphs.
+Each chunk is prefixed with the paper title so the embedding model has document-level context.
 
-### Retrieval and Ranking
+### Retrieval and ranking
 
-When a user asks a question, a three-stage hybrid retrieval pipeline finds relevant content:
+A question runs through a three-stage hybrid retrieval pipeline:
 
 ```mermaid
 flowchart TD
@@ -382,21 +346,31 @@ flowchart TD
     GRAPH --> LLM[Stream Answer via GPT-4.1]
 ```
 
-**Stage 1 - Title matching** does word-overlap comparison between the question and all paper titles in the user's feed. A match requires at least 3 overlapping non-stop-words and a Jaccard ratio of 0.4 or higher. The top 3 matches are returned.
+Stage 1, title matching, compares the question word-for-word against every paper title in the user's
+feed. A match needs at least 3 overlapping non-stop-words and a Jaccard ratio of 0.4 or higher. The
+top 3 are returned.
 
-**Stage 2 - Chunk-level vector search** calls a Supabase RPC function that performs cosine similarity search across the paper_chunks table. It returns 40 candidate chunks, which are then reranked by Cohere to the top 20. The parent papers are resolved from the matching chunks.
+Stage 2, chunk-level vector search, calls a Supabase RPC that runs cosine similarity across
+`paper_chunks`. It returns 40 candidates, reranked by Cohere to the top 20, and the parent papers are
+resolved from the matching chunks.
 
-**Stage 3 - Paper-level fallback** activates if chunk search returns fewer than 3 results. It searches the papers table directly using abstract embeddings, returning 50 candidates reranked to the top 25.
+Stage 3, paper-level fallback, activates when chunk search returns fewer than 3 results. It searches
+the papers table on abstract embeddings, returning 50 candidates reranked to the top 25.
 
-Results from all three stages are merged with title matches taking priority, deduplicated by paper ID.
+Results from all three stages are merged with title matches taking priority, then deduplicated by
+paper ID.
 
-**Knowledge graph enrichment** fetches the graph neighborhood for all retrieved papers, including co-authors, related concepts, citation links, and institutional affiliations. This context is prepended to the LLM prompt so the model can reference structural relationships.
+Graph enrichment fetches the neighborhood for every retrieved paper, including co-authors, related
+concepts, citation links, and affiliations. That context is prepended to the prompt so the model can
+refer to structural relationships.
 
-**Intent classification** uses o4-mini to categorize the question as "retrieval" requiring paper lookup, "follow_up" continuing from conversation history, or "general" needing no paper context. This determines whether the full retrieval pipeline runs.
+Intent classification uses o4-mini to label the question as `retrieval` (needs paper lookup),
+`follow_up` (continues from history), or `general` (needs no papers). This decides whether the full
+retrieval pipeline runs.
 
-### Knowledge Graph
+### Knowledge graph
 
-The knowledge graph is stored in Neo4j and captures structural relationships between research entities.
+The graph lives in Neo4j and captures structural relationships between research entities.
 
 ```mermaid
 graph LR
@@ -412,7 +386,7 @@ graph LR
     style I1 fill:#f59e0b,color:#fff
 ```
 
-**Node types and properties**:
+Nodes and properties:
 
 | Node        | Properties                                   |
 | ----------- | -------------------------------------------- |
@@ -421,9 +395,9 @@ graph LR
 | Concept     | name, name_lower, category                   |
 | Institution | name, name_lower                             |
 
-Concept categories are: method, dataset, theory, task, and technique.
+Concept categories are method, dataset, theory, task, and technique.
 
-**Edge types**:
+Edges:
 
 | Edge             | Meaning                         |
 | ---------------- | ------------------------------- |
@@ -432,42 +406,44 @@ Concept categories are: method, dataset, theory, task, and technique.
 | INVOLVES_CONCEPT | Paper uses or discusses Concept |
 | AFFILIATED_WITH  | Author belongs to Institution   |
 
-**Graph population pipeline**:
+Population runs in five steps:
 
-1. **Paper nodes** are batch-upserted using MERGE on arxiv_id
-2. **Author relationships** are created from paper metadata
-3. **Concepts** are extracted by o4-mini from each paper's title and abstract, producing 3-10 tagged concepts per paper
-4. **Citations** are fetched from the Semantic Scholar API for up to 30 papers per run, creating CITES edges
-5. **Institutions** are fetched from the OpenAlex API using DOI lookups for up to 20 papers per run
+1. Paper nodes are batch-upserted with MERGE on `arxiv_id`
+2. Author relationships are created from paper metadata
+3. Concepts are extracted by o4-mini from each title and abstract, 3 to 10 per paper
+4. Citations come from the Semantic Scholar API for up to 30 papers per run
+5. Institutions come from OpenAlex via DOI lookup for up to 20 papers per run
 
-**Cluster detection** uses connected-component analysis. Two papers are considered connected if they share 2 or more concepts or have a direct citation link. The algorithm runs BFS to find all connected components and labels each cluster by its top 3 most frequent concepts.
+Cluster detection uses connected-component analysis. Two papers count as connected if they share 2
+or more concepts or have a direct citation link. BFS finds the components and each cluster is
+labeled by its three most frequent concepts.
 
-**Constraints and indexes**:
+Constraints and indexes:
 
-- Uniqueness constraints on Paper.arxiv_id, Author.name_lower, Concept.name_lower, Institution.name_lower
-- Full-text indexes on Paper.title and Concept.name for search
+- Uniqueness on `Paper.arxiv_id`, `Author.name_lower`, `Concept.name_lower`, `Institution.name_lower`
+- Full-text indexes on `Paper.title` and `Concept.name`
 
-### AI Question Answering
+### Question answering
 
-The Q&A system supports text-only and multimodal queries with SSE streaming.
-
-**Models and configuration**:
+Text-only and multimodal queries, streamed over SSE.
 
 | Setting            | Value            |
 | ------------------ | ---------------- |
-| Q&A model          | GPT-4.1          |
+| Model              | GPT-4.1          |
 | Temperature        | 0.4              |
 | Max output tokens  | 16,384           |
 | Max context window | 32,000 tokens    |
 | History window     | Last 10 messages |
 | Message truncation | 3,000 characters |
 
-**Context budget allocation** divides the available token budget evenly across retrieved papers, with a minimum of 800 tokens per paper. If a paper's full text exceeds its budget, it is truncated at the token level by encoding, slicing, and decoding. Papers with fewer than 200 remaining tokens after title allocation are dropped.
+The context budget is divided evenly across retrieved papers with a floor of 800 tokens each. A
+paper whose full text exceeds its share is truncated at the token level by encoding, slicing, and
+decoding. Papers left with fewer than 200 tokens after the title allocation are dropped.
 
-**Multimodal processing**:
+File handling:
 
-| Input Type | Processing                                                     |
-| ---------- | -------------------------------------------------------------- |
+| Input type | Processing                                                     |
+| ---------- | --------------------------------------------------------------- |
 | Images     | Base64-encoded and sent to GPT-4.1 vision                      |
 | PDFs       | Text extracted via PyMuPDF                                     |
 | Word docs  | Text extracted via python-docx                                 |
@@ -475,21 +451,22 @@ The Q&A system supports text-only and multimodal queries with SSE streaming.
 | Video      | Audio track extracted via ffmpeg, then transcribed via Whisper |
 | Text files | Read directly as UTF-8                                         |
 
-Maximum file size is 25 MB per upload.
+Maximum upload size is 25 MB.
 
-**SSE streaming** sends five event types during a response:
+The stream sends five event types:
 
 | Event   | Payload                          | Timing                    |
 | ------- | -------------------------------- | ------------------------- |
 | stage   | Current processing step name     | As each stage starts      |
 | sources | Retrieved paper metadata         | After retrieval completes |
-| token   | Single token of the LLM response | During generation         |
+| token   | Single token of the response     | During generation         |
 | done    | Final complete response text     | After generation finishes |
 | error   | Error message                    | On failure                |
 
-### Agent-Based Graph Traversal
+### Agent-based graph traversal
 
-The Deep Analysis mode uses an autonomous agent that iteratively explores the knowledge graph to discover research themes, gaps, and connections before writing a synthesis.
+Deep mode runs an agent that walks the knowledge graph looking for themes, gaps, and connections
+before writing the synthesis.
 
 ```mermaid
 flowchart TD
@@ -523,13 +500,16 @@ flowchart TD
     SYNTH --> STREAM[Stream Synthesis via SSE]
 ```
 
-The agent has access to seven tools that query the Neo4j knowledge graph. It starts with the user-selected papers, explores outward by following citations, related papers, and shared concepts, and records findings along the way. Each finding is categorized as a theme, gap, method, trend, connection, or contradiction.
+The agent has seven tools against Neo4j. It starts from the selected papers and works outward
+through citations, related papers, and shared concepts, recording findings as it goes. Each finding
+is categorized as a theme, gap, method, trend, connection, or contradiction.
 
-The agent runs with temperature 0.2 for structured tool-calling decisions and switches to temperature 0.3 with a 6,144 token budget for the final synthesis.
+It runs at temperature 0.2 for tool-calling decisions and switches to 0.3 with a 6,144 token budget
+for the final synthesis.
 
 ---
 
-## Tech Stack
+## Tech stack
 
 ### Backend
 
@@ -575,17 +555,16 @@ The agent runs with temperature 0.2 for structured tool-calling decisions and sw
 | AWS App Runner | Managed backend hosting                     |
 | AWS ECR        | Docker container registry                   |
 | Vercel         | Frontend hosting and edge network           |
-| GitHub Actions | CI/CD pipeline for backend deployment       |
 | Docker         | Backend containerization                    |
 | Supabase       | Managed PostgreSQL with pgvector extension  |
 | Neo4j Aura     | Managed graph database                      |
 | Supabase Auth  | Authentication with Google and GitHub OAuth |
 
-### AI Models
+### Models
 
 | Model                  | Provider | Purpose                                                                                    |
 | ---------------------- | -------- | ------------------------------------------------------------------------------------------ |
-| GPT-4.1                | OpenAI   | Q&A answers, multimodal vision, literature synthesis, publication reviews, agent traversal |
+| GPT-4.1                | OpenAI   | Q&A answers, vision, literature synthesis, publication reviews, agent traversal            |
 | o4-mini                | OpenAI   | Paper summaries, intent classification, chat titles, entity extraction, query optimization |
 | text-embedding-3-large | OpenAI   | 1536-dimension vector embeddings for papers, chunks, and user interests                    |
 | Whisper                | OpenAI   | Audio and video transcription                                                              |
@@ -593,46 +572,40 @@ The agent runs with temperature 0.2 for structured tool-calling decisions and sw
 
 ---
 
-## Authentication and Security
+## Authentication and security
 
-### Backend Security
+Every backend route is behind JWT auth via Supabase.
 
-All backend API routes are protected by JWT-based authentication via Supabase Auth:
+- `get_current_user()` reads the `Authorization: Bearer <token>` header, verifies the JWT with
+  Supabase, and returns the user. Applied as a dependency on all routers.
+- `require_same_user()` keeps a user to their own data (feed, chats, reports). Used on user-scoped
+  endpoints.
+- `require_admin()` gates admin endpoints (pipeline trigger, graph population) behind an
+  `X-Admin-Key` header. If `ADMIN_API_KEY` is unset, those endpoints are open, which is dev mode.
 
-- **`get_current_user()`** — Extracts the `Authorization: Bearer <token>` header, verifies the JWT with Supabase, and returns the authenticated user. Applied as a dependency on all routers.
-- **`require_same_user()`** — Ensures the authenticated user can only access their own data (feed, chats, reports). Used on user-scoped endpoints.
-- **`require_admin()`** — Protects admin-only endpoints (pipeline trigger, graph population) with an `X-Admin-Key` header. If `ADMIN_API_KEY` is not set, admin endpoints are unrestricted (dev mode).
+On the frontend:
 
-### Frontend Security
-
-- **`authFetch()`** — A wrapper around `fetch()` in [lib/api.ts](frontend/lib/api.ts) that automatically attaches the Supabase session JWT to every API request.
-- **`proxy.ts`** — Next.js 16 middleware proxy that calls `updateSession()` on every request to refresh the Supabase session cookie.
-- **Auth guards** — All protected pages (`/feed`, `/saved`, `/ask`, `/graph`, `/onboarding`) check `useAuth()` and redirect unauthenticated users to the landing page.
-- **OAuth callback** — [app/auth/callback/route.ts](frontend/app/auth/callback/route.ts) handles the OAuth redirect after Google or GitHub sign-in, exchanging the code for a session.
-
-### OAuth Providers
+- `authFetch()` in [lib/api.ts](frontend/lib/api.ts) wraps `fetch()` and attaches the Supabase
+  session JWT to every API call.
+- [proxy.ts](frontend/proxy.ts) is the Next.js middleware proxy that calls `updateSession()` on
+  every request to refresh the session cookie.
+- Protected pages (`/feed`, `/saved`, `/ask`, `/graph`, `/onboarding`) check `useAuth()` and redirect
+  signed-out visitors to the landing page.
+- [app/auth/callback/route.ts](frontend/app/auth/callback/route.ts) handles the OAuth redirect after
+  Google or GitHub sign-in and exchanges the code for a session.
 
 | Provider | Scopes         |
 | -------- | -------------- |
 | Google   | email, profile |
 | GitHub   | user:email     |
 
-Email/password sign-up is also supported as a fallback.
+Email and password sign-up works as a fallback.
 
 ---
 
 ## Deployment
 
-### Architecture
-
 ```
-┌──────────────┐     ┌──────────────────┐     ┌──────────────────┐
-│   GitHub     │────>│   GitHub Actions  │────>│    AWS ECR       │
-│   (push to   │     │   (build & push   │     │  (Docker image   │
-│    main)     │     │    Docker image)  │     │   registry)      │
-└──────────────┘     └──────────────────┘     └────────┬─────────┘
-                                                       │
-                                                       v
 ┌──────────────┐                              ┌──────────────────┐
 │   Vercel     │                              │  AWS App Runner  │
 │  (Frontend)  │─────────── API calls ───────>│   (Backend)      │
@@ -652,29 +625,25 @@ Email/password sign-up is also supported as a fallback.
                                               └──────────────────┘
 ```
 
-### Backend (AWS)
+The backend ships as a Docker image built from `backend/Dockerfile` and currently runs on AWS App
+Runner, pulling from ECR (`paper-pulse-api`). The repository has no CI workflow at the moment, so
+the image is built and pushed outside of it. [MIGRATION.md](MIGRATION.md) covers moving the backend
+off App Runner onto self-hosting.
 
-- **Container Registry**: AWS ECR (`paper-pulse-api`)
-- **Hosting**: AWS App Runner auto-deploys from the ECR image
-- **CI/CD**: GitHub Actions workflow ([deploy-backend.yml](.github/workflows/deploy-backend.yml)) triggers on pushes to `main` that touch `backend/**`, builds the Docker image, and pushes to ECR
-- **Dockerfile**: Multi-stage build in `backend/Dockerfile`
+The frontend is connected to Vercel and auto-deploys on pushes to `main`, with environment variables
+set in the Vercel dashboard.
 
-### Frontend (Vercel)
+Supabase provides managed Postgres with the pgvector extension. Neo4j Aura provides the graph, with
+retry logic on the client (3 attempts, exponential backoff) for transient connection failures.
 
-- Connected directly to the GitHub repository
-- Auto-deploys on push to `main`
-- Environment variables configured in the Vercel dashboard
-
-### Database
-
-- **Supabase**: Managed PostgreSQL with pgvector extension, hosted by Supabase
-- **Neo4j Aura**: Managed graph database with automatic retry logic (3 attempts, exponential backoff) for transient connection failures
+For auth, configure the Google and GitHub providers in the Supabase dashboard and set the redirect
+URL to `https://<your-frontend-domain>/auth/callback`.
 
 ---
 
-## Database Schema
+## Database schema
 
-### Supabase Tables
+### Supabase tables
 
 ```mermaid
 erDiagram
@@ -756,14 +725,14 @@ erDiagram
     chats ||--o{ chat_messages : "contains"
 ```
 
-### Supabase RPC Functions
+### Supabase RPC functions
 
 | Function           | Purpose                                                                   |
 | ------------------ | ------------------------------------------------------------------------- |
 | match_paper_chunks | Cosine similarity search on chunk vectors, filtered by user feed          |
 | match_user_papers  | Cosine similarity search on paper abstract vectors, filtered by user feed |
 
-### Neo4j Graph Schema
+### Neo4j schema
 
 | Constraint             | Target |
 | ---------------------- | ------ |
@@ -772,16 +741,16 @@ erDiagram
 | Concept.name_lower     | Unique |
 | Institution.name_lower | Unique |
 
-| Full-Text Index | Field        |
+| Full-text index | Field        |
 | --------------- | ------------ |
 | paper_title_ft  | Paper.title  |
 | concept_name_ft | Concept.name |
 
 ---
 
-## API Reference
+## API reference
 
-> All endpoints require a valid `Authorization: Bearer <token>` header from Supabase Auth, except where noted.
+All endpoints need a valid `Authorization: Bearer <token>` header from Supabase Auth unless noted.
 
 ### Users
 
@@ -825,7 +794,7 @@ erDiagram
 | DELETE | /chats/{chat_id}          | Delete chat and all messages                     |
 | POST   | /chats/{chat_id}/messages | Save a message with auto-title generation        |
 
-### Knowledge Graph
+### Knowledge graph
 
 | Method | Path                              | Description                                       |
 | ------ | --------------------------------- | ------------------------------------------------- |
@@ -858,75 +827,43 @@ erDiagram
 
 ---
 
-## Frontend Pages
+## Frontend
 
-### Branding and Theming
+| Page                   | What it is                                                                                                           |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `/`                    | Hero, call-to-action buttons, four feature cards, and the source badges                                              |
+| `/onboarding`          | 28 research domains in five groups, plus a free-text interests field                                                 |
+| `/feed`                | Date-grouped paper cards with a jump-to-date rail, tracked by IntersectionObserver                                   |
+| `/saved`               | Bookmarked papers with client-side search                                                                            |
+| `/ask`                 | Chat with a conversation sidebar, file attachments, voice recording, SSE streaming, KaTeX and GFM markdown           |
+| `/graph`               | Force-directed explorer with filtering, search, clustering, three synthesis modes, Mermaid rendering, and PNG export |
+| `/sign-in`, `/sign-up` | Email and password forms plus Google and GitHub OAuth                                                                |
+| `/unauthorized`, 404, error boundary | Status pages sharing the app logo and layout                                                           |
 
-All pages share a consistent indigo-accented brand identity. A custom SVG logo (rounded document with a pulse line) is used as both the in-app logo and the browser favicon. The brand name renders as "Paper" in dark text and "Pulse" in indigo.
+All signed-in pages share a `Navbar` (logo, Feed / Saved / Ask AI / Graph, theme toggle, avatar
+menu), which collapses to a hamburger on mobile. It takes `leftContent` and `rightContent` slots,
+used by `/ask` for its sidebar toggle and by `/graph` for its search bar.
 
-The app defaults to a white (light) theme for all users. A dark theme is available through a Sun/Moon toggle button in the navbar and on the landing page header. Theme state is managed by `next-themes` with class-based switching, persisted in localStorage, and applied without a flash of unstyled content. Smooth CSS transitions (0.2s) animate background, text, and border color changes between themes. Custom scrollbar styling adapts to both modes.
+Branding is indigo-accented: a custom SVG logo (rounded document with a pulse line) doubles as the
+favicon, and the wordmark renders "Paper" in dark text and "Pulse" in indigo. Light theme is the
+default, dark is a toggle in the navbar, and `next-themes` persists the choice in localStorage
+without a flash of unstyled content. Graph nodes are colored by type: papers blue, authors purple,
+concepts green, institutions amber.
 
-### Shared Navbar
+`/graph` deep-links via `?paper=<arxiv_id>`, which is what the "View in Graph" button on a paper
+card sends. The graph waits for the force simulation to settle before centering and zooming the
+target node, which avoids the camera chasing nodes that are still moving.
 
-All authenticated pages use a shared `Navbar` component that replaces the per-page inline headers. It includes the logo, four navigation links (Feed, Saved, Ask AI, Graph) with active-state highlighting, the theme toggle, and the user avatar menu. On mobile, navigation collapses behind a hamburger menu with an overlay dropdown. The navbar accepts `leftContent` and `rightContent` slots so individual pages can inject page-specific controls: the Ask AI page places its sidebar toggle in `leftContent`, and the Graph page places its search bar in `rightContent`.
-
-### Landing Page
-
-Hero section with headline, subtitle, and call-to-action buttons. Unauthenticated visitors see "Get Started Free" and "Sign In" buttons; signed-in users see a "Go to my Feed" link. Below the hero, four feature cards in a two-column grid highlight the main capabilities (Daily Research Feed, AI Summaries & Q&A, Knowledge Graph, Literature Synthesis). Source badges at the bottom list the four academic databases.
-
-### Onboarding
-
-Domain selection grid with 28 research areas organized into five categories: Core Sciences, Life and Health Sciences, Engineering and Applied, Social Sciences and Humanities, and Physics Specializations. Includes a free-text interest description field. On submit, the backend generates an interest embedding and optimized search queries.
-
-### Paper Feed
-
-Date-grouped paper cards with a date navigation sidebar. Each card shows the title, authors, source badge, relevance score, AI summary, and action buttons for saving and exploring with AI. Uses IntersectionObserver for scroll-based date tracking.
-
-### Saved Papers
-
-Filtered view of bookmarked papers with search functionality. Same card layout as the main feed with an unsave toggle.
-
-### Ask AI
-
-Full chat interface with a sidebar listing all conversations. Features include persistent chat sessions, file attachments with preview, voice recording via the MediaRecorder API, SSE streaming responses with stage indicators, markdown rendering with KaTeX math and GFM tables, and related paper suggestions from the knowledge graph.
-
-### Knowledge Graph Explorer
-
-Interactive force-directed graph powered by react-force-graph-2d. Papers are blue, authors are purple, concepts are green, and institutions are amber. Features include node hover highlighting with neighbor emphasis, node and edge type filtering, full-text search, click-to-detail panels, auto-detected cluster visualization with click-to-zoom, three synthesis modes, Mermaid diagram rendering, report saving and loading, PNG export, and a table of contents for long reports.
-
-Deep-linking is supported via the `?paper=<arxiv_id>` query parameter. The "View in Graph" button on feed paper cards navigates to `/graph?paper=<id>`. On arrival the graph loads and the force simulation is allowed to settle before the target node is located, centered, zoomed, and its detail panel opened — preventing the disorienting camera chase that would occur if centering happened while nodes were still moving.
-
-### Sign-in and Sign-up
-
-Centered forms with the app logo, email/password fields, Google and GitHub OAuth buttons, and cross-page links. The sign-in page greets returning users with "Welcome back" and the sign-up page with "Create your account".
-
-### Error and Status Pages
-
-All error pages display the app logo and use indigo-accented primary buttons.
-
-**Not Found (404)** displays a centered "Page not found" message with a link back to the home page.
-
-**Error Boundary** catches unhandled runtime errors within the app. Shows a "Something went wrong" message with a "Try Again" button that triggers React's error recovery, plus a link back to home.
-
-**Unauthorized** is shown at `/unauthorized` when a user lacks permission. If the user is not signed in, it displays a "Sign In" button; if they are signed in but lack access, it shows a "Go to Feed" link instead.
-
-### Page Transitions
-
-A shared `PageLoader` component replaces blank screen flashes during auth checks and page transitions. All protected pages show a full-screen indigo spinner while authentication state loads, and a `RedirectLoader` variant handles navigation with a "Redirecting..." message. The onboarding page displays a "Setting up your feed..." loader after successful submission.
+`PageLoader` and `RedirectLoader` cover auth checks and transitions so pages do not flash blank.
 
 ---
 
-## Getting Started
+## Getting started
 
-### Prerequisites
+You need Python 3.11+, Node 18+, a Supabase project with pgvector enabled, a Neo4j instance (Aura or
+local), and API keys for OpenAI and Cohere.
 
-- Python 3.11 or later
-- Node.js 18 or later
-- A Supabase project with pgvector enabled
-- A Neo4j Aura instance or local Neo4j database
-- API keys for OpenAI and Cohere
-
-### Backend Setup
+Backend:
 
 ```bash
 cd backend
@@ -934,54 +871,27 @@ python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-```
-
-Edit the .env file with your credentials, then start the server:
-
-```bash
+# edit .env with your credentials
 python run.py
 ```
 
-The API will be available at http://localhost:8000.
+The API comes up on http://localhost:8000.
 
-### Frontend Setup
+Frontend:
 
 ```bash
 cd frontend
 npm install
 cp .env.example .env.local
-```
-
-Edit .env.local with your Supabase URL and anon key, then start the dev server:
-
-```bash
+# edit .env.local with your Supabase URL and anon key
 npm run dev
 ```
 
-The app will be available at http://localhost:3000.
-
-### Production Deployment
-
-**Backend (AWS)**:
-
-1. Push to `main` with changes in `backend/` — GitHub Actions automatically builds the Docker image and pushes it to AWS ECR
-2. AWS App Runner detects the new image and redeploys automatically
-3. Set all backend environment variables in the App Runner service configuration
-
-**Frontend (Vercel)**:
-
-1. Connect the repository to Vercel
-2. Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_API_URL` in the Vercel dashboard
-3. Pushes to `main` auto-deploy
-
-**Auth**:
-
-1. Configure Google and GitHub OAuth providers in the Supabase dashboard
-2. Set the redirect URL to `https://<your-frontend-domain>/auth/callback`
+The app comes up on http://localhost:3000.
 
 ---
 
-## Environment Variables
+## Environment variables
 
 ### Backend
 
@@ -1010,17 +920,14 @@ The app will be available at http://localhost:3000.
 
 ---
 
-## Project Structure
+## Project structure
 
 ```
 paper-pulse/
-    .github/
-        workflows/
-            deploy-backend.yml              CI/CD: build and push Docker image to ECR
     backend/
         run.py                              Server entry point
         requirements.txt                    Python dependencies
-        Dockerfile                          Container build for AWS deployment
+        Dockerfile                          Container build
         app/
             main.py                         FastAPI app with lifespan and scheduler
             database.py                     Supabase client initialization
@@ -1033,12 +940,12 @@ paper-pulse/
                 ask.py                      Q&A with hybrid retrieval and SSE streaming
                 chats.py                    Chat CRUD and message persistence
                 graph.py                    Knowledge graph queries and synthesis
-                pipeline.py                Manual pipeline trigger and bootstrap
+                pipeline.py                 Manual pipeline trigger and bootstrap
             services/
                 openai_service.py           GPT-4.1, o4-mini, embeddings, Whisper calls
                 pipeline_service.py         Daily ingestion pipeline orchestration
                 neo4j_service.py            Neo4j driver, schema, queries, clustering
-                agent_service.py            Autonomous graph traversal agent
+                agent_service.py            Graph traversal agent
                 graph_pipeline_service.py   Graph population from paper data
                 arxiv_service.py            ArXiv API integration
                 semantic_scholar_service.py Semantic Scholar API integration
@@ -1048,9 +955,9 @@ paper-pulse/
                 chunking_service.py         Paper text chunking for vector search
                 pdf_service.py              PDF download and text extraction
                 rerank_service.py           Cohere neural reranking
-                query_optimizer.py          LLM-based search query optimization
+                query_optimizer.py          Search query optimization
                 entity_extraction_service.py Concept and affiliation extraction
-                file_processor.py           Multimodal file processing
+                file_processor.py           Attachment processing
     frontend/
         package.json                        Node dependencies
         next.config.ts                      Next.js configuration
@@ -1066,7 +973,7 @@ paper-pulse/
             onboarding/page.tsx             Domain selection and interest input
             feed/page.tsx                   Daily paper feed with date grouping
             saved/page.tsx                  Saved papers view
-            ask/page.tsx                    AI chat interface
+            ask/page.tsx                    Ask AI chat interface
             graph/page.tsx                  Knowledge graph explorer
             unauthorized/page.tsx           Access denied page
             sign-in/page.tsx                Email and password sign-in
@@ -1075,7 +982,7 @@ paper-pulse/
             RelatedPapers.tsx               Related paper suggestions
             mermaid-renderer.tsx            Mermaid diagram renderer
             auth-provider.tsx               Supabase Auth context and useAuth hook
-            theme-provider.tsx              next-themes wrapper for light/dark mode
+            theme-provider.tsx              next-themes wrapper for light and dark mode
             navbar.tsx                      Shared navigation bar with theme toggle
             logo.tsx                        SVG logo icon and brand wordmark
             user-menu.tsx                   User avatar dropdown with sign-out
