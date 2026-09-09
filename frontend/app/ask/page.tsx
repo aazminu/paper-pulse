@@ -11,7 +11,6 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import {
 	Send,
-	Bot,
 	User as UserIcon,
 	BookOpen,
 	Paperclip,
@@ -41,6 +40,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import RelatedPapers from "@/components/RelatedPapers";
+import { LogoIcon } from "@/components/logo";
 
 /* Types */
 
@@ -1748,8 +1748,8 @@ function AskPageContent() {
 				<main className="flex-1 flex flex-col min-h-0 overflow-hidden">
 					{isEmptyState ? (
 						<div className="flex-1 flex flex-col items-center justify-center p-6">
-							<div className="h-16 w-16 rounded-2xl bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center mb-6">
-								<Bot className="h-9 w-9 text-blue-600 dark:text-blue-400" />
+							<div className="h-16 w-16 rounded-2xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-6">
+								<LogoIcon className="h-9 w-9" />
 							</div>
 							<h2 className="text-2xl font-bold mb-2">
 								How can I help you today?
@@ -1801,8 +1801,8 @@ function AskPageContent() {
 												className={`flex gap-4 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
 											>
 												{msg.role === "ai" && (
-													<div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center shrink-0 mt-1">
-														<Bot className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+													<div className="h-8 w-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0 mt-1">
+														<LogoIcon className="h-5 w-5" />
 													</div>
 												)}
 
@@ -1907,8 +1907,8 @@ function AskPageContent() {
 
 									{isLoading && streamingStage && (
 										<div className="flex gap-4 justify-start">
-											<div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center shrink-0 mt-1">
-												<Bot className="h-5 w-5 text-blue-600 dark:text-blue-400 animate-pulse" />
+											<div className="h-8 w-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center shrink-0 mt-1">
+												<LogoIcon className="h-5 w-5 animate-pulse" />
 											</div>
 											<div className="bg-white dark:bg-zinc-900 border shadow-sm rounded-2xl rounded-tl-sm p-4 text-zinc-500 text-sm flex items-center gap-2">
 												<svg
