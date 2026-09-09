@@ -175,14 +175,6 @@ const EDGE_COLORS: Record<string, string> = {
 	cites: "#3b82f6",
 };
 
-const CATEGORY_ICONS: Record<string, string> = {
-	method: "🔧",
-	dataset: "📊",
-	theory: "📐",
-	task: "🎯",
-	technique: "⚡",
-};
-
 const TYPE_ICONS = {
 	paper: BookOpen,
 	author: Users,
@@ -2309,9 +2301,6 @@ function GraphPageContent() {
 																		key={i}
 																		className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
 																	>
-																		{c.category && (
-																			<span>{CATEGORY_ICONS[c.category]}</span>
-																		)}
 																		<span>{c.name}</span>
 																	</span>
 																))}
@@ -2459,7 +2448,7 @@ function GraphPageContent() {
 																	key={i}
 																	className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
 																>
-																	🏛️ {inst}
+																	{inst}
 																</span>
 															))}
 														</div>
@@ -2553,9 +2542,6 @@ function GraphPageContent() {
 											<div className="space-y-3">
 												{nodeDetails.category && (
 													<div className="flex items-center gap-2">
-														<span className="text-sm">
-															{CATEGORY_ICONS[nodeDetails.category] || "📌"}
-														</span>
 														<span className="text-xs text-zinc-500 capitalize">
 															{nodeDetails.category}
 														</span>
