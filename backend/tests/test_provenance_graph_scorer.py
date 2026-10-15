@@ -76,7 +76,9 @@ def test_cli_benchmark_markdown_json_and_reproducibility(
 
     rows_1 = paper_bench.run_benchmark(seed=42)
     rows_2 = paper_bench.run_benchmark(seed=42)
+    rows_3 = paper_bench.run_benchmark(seed=99)
     assert rows_1 == rows_2
+    assert rows_1 != rows_3
     assert len(rows_1) == 4
 
     md = paper_bench.format_markdown_table(rows_1)
@@ -92,6 +94,10 @@ def test_cli_benchmark_markdown_json_and_reproducibility(
     assert data["benchmarks"] == rows_1
     assert json.loads(out_path.read_text(encoding="utf-8")) == data
 
+    err_rc = paper_bench.main(["--format", "markdown", "--output", str(tmp_path)])
+    assert err_rc == 1
+    assert "Error writing output" in capsys.readouterr().err
+
     proc = subprocess.run(
         [sys.executable, str(repo_root / "scripts" / "benchmark.py"), "--format", "markdown"],
         capture_output=True,
@@ -100,7 +106,16 @@ def test_cli_benchmark_markdown_json_and_reproducibility(
     )
     assert "weighted_reciprocal_rank_fusion" in proc.stdout
 
+    proc_main = subprocess.run(
+        [sys.executable, str(repo_root / "__main__.py"), "--format", "json", "--seed", "42"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert json.loads(proc_main.stdout)["seed"] == 42
+
     with pytest.raises(SystemExit):
         paper_bench.main(["--format", "invalid_fmt"])
+
 
 
