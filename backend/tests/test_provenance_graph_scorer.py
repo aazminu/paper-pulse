@@ -63,3 +63,44 @@ def test_claim_provenance_verification_detects_hallucinated_numbers() -> None:
     assert res_short_bad.numeric_tokens_verified is False
     assert res_short_bad.is_grounded is False
 
+
+def test_cli_benchmark_markdown_json_and_reproducibility(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    import json
+    import subprocess
+
+    repo_root = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(repo_root / "scripts"))
+    import benchmark as paper_bench
+
+    rows_1 = paper_bench.run_benchmark(seed=42)
+    rows_2 = paper_bench.run_benchmark(seed=42)
+    assert rows_1 == rows_2
+    assert len(rows_1) == 4
+
+    md = paper_bench.format_markdown_table(rows_1)
+    assert "| benchmark | top_item | primary_metric | score |" in md
+    assert "citation_personalized_pagerank" in md
+    assert "hallucinated_number_rejection" in md
+
+    out_path = tmp_path / "paper_pulse_bench.json"
+    rc = paper_bench.main(["--format", "json", "--seed", "42", "--output", str(out_path)])
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["seed"] == 42
+    assert data["benchmarks"] == rows_1
+    assert json.loads(out_path.read_text(encoding="utf-8")) == data
+
+    proc = subprocess.run(
+        [sys.executable, str(repo_root / "scripts" / "benchmark.py"), "--format", "markdown"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "weighted_reciprocal_rank_fusion" in proc.stdout
+
+    with pytest.raises(SystemExit):
+        paper_bench.main(["--format", "invalid_fmt"])
+
+
