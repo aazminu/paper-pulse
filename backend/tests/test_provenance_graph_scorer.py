@@ -1,0 +1,53 @@
+import sys
+from pathlib import Path
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.services.provenance_graph_scorer import CitationGraphProvenanceEngine
+
+
+def test_citation_pagerank_concentrates_on_foundational_paper() -> None:
+    engine = CitationGraphProvenanceEngine(damping=0.85, rrf_k=60)
+    nodes = ["P_FOUNDATION", "P_EXT_1", "P_EXT_2", "P_RECENT"]
+    # P_EXT_1, P_EXT_2, and P_RECENT all cite P_FOUNDATION; P_RECENT also cites P_EXT_1
+    edges = [
+        ("P_EXT_1", "P_FOUNDATION"),
+        ("P_EXT_2", "P_FOUNDATION"),
+        ("P_RECENT", "P_FOUNDATION"),
+        ("P_RECENT", "P_EXT_1"),
+    ]
+    pr = engine.compute_citation_pagerank(nodes, edges)
+    assert abs(sum(pr.values()) - 1.0) < 1e-5
+    assert pr["P_FOUNDATION"] > pr["P_EXT_1"] > pr["P_RECENT"]
+
+
+def test_reciprocal_rank_fusion_and_weights() -> None:
+    engine = CitationGraphProvenanceEngine(rrf_k=60)
+    dense_rank = ["DOC_A", "DOC_B", "DOC_C"]
+    graph_rank = ["DOC_B", "DOC_A", "DOC_D"]
+    fused = engine.reciprocal_rank_fusion([dense_rank, graph_rank], weights=[1.0, 2.0])
+    assert fused[0][0] == "DOC_B"
+    assert fused[1][0] == "DOC_A"
+
+    with pytest.raises(ValueError):
+        engine.reciprocal_rank_fusion([dense_rank], weights=[-1.0])
+
+
+def test_claim_provenance_verification_detects_hallucinated_numbers() -> None:
+    engine = CitationGraphProvenanceEngine()
+    corpus = {
+        "ARXIV:2601.001": (
+            "ChromAlphaGenome achieves 0.964 AUROC on cryptic splice variants "
+            "across 1420 curated ClinVar non-coding loci."
+        )
+    }
+    valid_claim = "ChromAlphaGenome achieves 0.964 AUROC on cryptic splice variants across 1420 ClinVar loci."
+    res_ok = engine.verify_claim_provenance(valid_claim, ["ARXIV:2601.001"], corpus)
+    assert res_ok.is_grounded is True
+    assert res_ok.numeric_tokens_verified is True
+
+    hallucinated_claim = "ChromAlphaGenome achieves 0.999 AUROC across 9500 ClinVar loci."
+    res_bad = engine.verify_claim_provenance(hallucinated_claim, ["ARXIV:2601.001"], corpus)
+    assert res_bad.numeric_tokens_verified is False
+    assert res_bad.is_grounded is False
