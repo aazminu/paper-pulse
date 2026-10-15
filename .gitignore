@@ -35,3 +35,6 @@ htmlcov/
 .venv/
 
 *.egg-info/
+.venv/
+.pytest_cache/
+uv.lock

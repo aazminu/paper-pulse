@@ -51,3 +51,15 @@ def test_claim_provenance_verification_detects_hallucinated_numbers() -> None:
     res_bad = engine.verify_claim_provenance(hallucinated_claim, ["ARXIV:2601.001"], corpus)
     assert res_bad.numeric_tokens_verified is False
     assert res_bad.is_grounded is False
+
+    # Short 1- and 2-digit hallucinated numbers must also be caught (not stripped by token length filter)
+    short_num_corpus = {
+        "ARXIV:2601.002": "The pipeline reduces latency by 12% across 2 benchmark datasets."
+    }
+    short_num_hallucinated = "The pipeline reduces latency by 95% across 8 benchmark datasets."
+    res_short_bad = engine.verify_claim_provenance(
+        short_num_hallucinated, ["ARXIV:2601.002"], short_num_corpus
+    )
+    assert res_short_bad.numeric_tokens_verified is False
+    assert res_short_bad.is_grounded is False
+
