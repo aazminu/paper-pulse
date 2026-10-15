@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Sequence
@@ -13,7 +14,7 @@ from app.services.provenance_graph_scorer import CitationGraphProvenanceEngine
 
 def run_benchmark(seed: int = 42) -> List[Dict[str, Any]]:
     """Run reproducible citation Personalized PageRank, RRF fusion, and claim provenance benchmarks."""
-    _ = seed
+    rng = random.Random(seed)
     engine = CitationGraphProvenanceEngine(damping=0.85, rrf_k=60)
 
     # 1. Personalized PageRank on multi-hop citation graph
@@ -24,12 +25,18 @@ def run_benchmark(seed: int = 42) -> List[Dict[str, Any]]:
         ("P_RECENT", "P_FOUNDATION"),
         ("P_RECENT", "P_EXT_1"),
     ]
-    pr = engine.compute_citation_pagerank(nodes, edges)
+    personalization = {
+        "P_FOUNDATION": 1.0,
+        "P_EXT_1": 0.5 + rng.uniform(-0.1, 0.1),
+        "P_EXT_2": 0.3 + rng.uniform(-0.05, 0.05),
+        "P_RECENT": 0.2,
+    }
+    pr = engine.compute_citation_pagerank(nodes, edges, personalization=personalization)
 
     # 2. Weighted Reciprocal Rank Fusion (RRF)
     fused = engine.reciprocal_rank_fusion(
         [["DOC_A", "DOC_B", "DOC_C"], ["DOC_B", "DOC_A", "DOC_D"]],
-        weights=[1.0, 2.0],
+        weights=[1.0 + rng.uniform(-0.08, 0.08), 2.0 + rng.uniform(-0.08, 0.08)],
     )
 
     # 3. Grounded vs. hallucinated numeric claim verification
@@ -141,8 +148,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         else format_markdown_table(rows)
     )
     if args.output is not None:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(rendered + "\n", encoding="utf-8")
+        try:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(rendered + "\n", encoding="utf-8")
+        except OSError as exc:
+            print(f"Error writing output to {args.output}: {exc}", file=sys.stderr)
+            return 1
     print(rendered)
     return 0
 
