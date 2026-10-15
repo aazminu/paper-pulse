@@ -121,7 +121,9 @@ class CitationGraphProvenanceEngine:
         corpus_by_id: Mapping[str, str],
         min_support_threshold: float = 0.45,
     ) -> ClaimVerificationResult:
-        claim_tokens = [t for t in self._tokenize(claim_text) if len(t) > 2]
+        claim_tokens = [
+            t for t in self._tokenize(claim_text) if len(t) > 2 or any(ch.isdigit() for ch in t)
+        ]
         if not claim_tokens or not cited_paper_ids:
             return ClaimVerificationResult(
                 claim_text=claim_text,
