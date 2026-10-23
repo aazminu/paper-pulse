@@ -1,0 +1,30 @@
+{
+  "title": "PaperPulse: Autonomous Nightly Scientific Literature Ingestion, Knowledge-Graph Synthesis & Claim Verification Engine",
+  "upload_type": "software",
+  "description": "PaperPulse is an open-source scientific literature digest and knowledge-graph engine developed by the Computational Genomics & Agentic Systems (CGAS) Lab at Northwestern University. It executes autonomous nightly ingestion across ArXiv, Semantic Scholar, PubMed, and OpenAlex, indexing full text in PostgreSQL with pgvector and constructing a multi-hop citation-concept graph in Neo4j to provide verifiable citation provenance and claim-level grounding for scientific research queries.",
+  "creators": [
+    {
+      "name": "Azmi, Abdullah",
+      "affiliation": "Northwestern University, Department of Computer Science & NICO",
+      "orcid": "0009-0005-2720-3347"
+    }
+  ],
+  "keywords": [
+    "Scientific Literature Digest",
+    "Knowledge Graphs",
+    "Neo4j",
+    "pgvector",
+    "Citation Provenance",
+    "ArXiv",
+    "PubMed",
+    "Retrieval-Augmented Generation"
+  ],
+  "license": "Apache-2.0",
+  "related_identifiers": [
+    {
+      "identifier": "https://abdullahazmi.com/lab/",
+      "relation": "isDocumentedBy",
+      "scheme": "url"
+    }
+  ]
+}
